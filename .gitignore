@@ -1,6 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,react,node,webstorm,pycharm
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode,react,node,webstorm,pycharm
 
+### Claude ###
+.claude/**
+
 ### Node ###
 # Logs
 logs
@@ -531,3 +534,8 @@ sketch
 # https://plugins.jetbrains.com/plugin/8053-azure-toolkit-for-intellij
 
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,react,node,webstorm,pycharm
+# Playwright (QA)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

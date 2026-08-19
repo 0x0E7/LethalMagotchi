@@ -1,0 +1,110 @@
+# LethalMagotchi — self-host / full-stack smoke-test stack (see .claude/devops.md §1).
+#
+# This is NOT the daily contributor dev loop. For that use docker-compose.dev.yml
+# (Postgres only) plus `npm run dev` on the host — see .claude/devops.md §4.
+#
+# Quick start:
+#   cp .env.example .env      # then set a real JWT_SECRET (>= 16 chars)
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Startup order: db (healthy) -> migrate (runs migrations + seed, exits 0) -> server.
+# Migrations are a one-shot init service, never a container-boot step, so multiple
+# server replicas can never race each other on schema changes.
+#
+# Config precedence: `env_file` loads .env, then `environment:` overrides the values
+# that must be container-specific (DATABASE_URL points at the `db` service, not
+# localhost; CLIENT_DIST enables same-origin SPA serving). Anything using ${VAR}
+# below is interpolated by Compose, which also reads ./.env.
+
+name: lethalmagotchi
+
+x-server-image: &server-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: lethalmagotchi-server:local
+
+x-server-env: &server-env
+  # DB lives on the compose network; the .env value (localhost) is wrong in-container.
+  DATABASE_URL: postgresql://${POSTGRES_USER:-lethal}:${POSTGRES_PASSWORD:-lethal}@db:5432/${POSTGRES_DB:-lethalmagotchi}
+  NODE_ENV: production
+  PORT: "8080"
+  HOST: 0.0.0.0
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lethal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lethal}
+      POSTGRES_DB: ${POSTGRES_DB:-lethalmagotchi}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lethal} -d ${POSTGRES_DB:-lethalmagotchi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    # Deliberately not published: nothing outside the stack needs it.
+    # Use docker-compose.dev.yml if you want Postgres on localhost:5432.
+
+  # One-shot init service. Both commands are idempotent (migrations are tracked in
+  # schema_migrations; the seed is upsert-by-id), so re-running `up` is always safe.
+  migrate:
+    <<: *server-image
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *server-env
+      # migrate/seed only need DATABASE_URL, but config.ts validates the whole schema.
+      JWT_SECRET: ${JWT_SECRET:-migrate-only-placeholder-secret}
+    command: ["sh", "-c", "node apps/server/dist/db/migrate.js && node apps/server/dist/db/seed.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  server:
+    <<: *server-image
+    restart: unless-stopped
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *server-env
+      CLIENT_DIST: /app/public
+      # Same-origin by default: the SPA is served by this server on :8080.
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8080}
+      # Plain HTTP on localhost, so Secure cookies would never be sent back.
+      # Set COOKIE_SECURE=true in .env once you put this behind TLS.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Required, no default on purpose — fail loudly rather than ship a known secret.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (min 16 chars) — see .env.example}
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Readiness, not liveness: this one round-trips to Postgres and 503s if it's down.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/readyz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  pgdata:

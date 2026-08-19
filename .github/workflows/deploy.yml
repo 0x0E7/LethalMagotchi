@@ -1,0 +1,176 @@
+# LethalMagotchi — build, publish, deploy the global server (see .claude/devops.md §3)
+#
+# Gate: runs only after CI succeeds on the default branch. GitHub has no
+# cross-workflow `needs:`, so `workflow_run` is how devops.md's "needs: ci" is
+# actually implemented. The image is built ONCE here and the PaaS deploys that
+# exact digest — there is no rebuild-from-source on the hosting side.
+#
+# Tags pushed to GHCR: sha-<short> (immutable, what you pin to) and latest.
+#
+# ROLLBACK: re-run this workflow via "Run workflow" with image_ref set to the
+# previously-good tag, e.g.
+#   ghcr.io/0x0e7/lethalmagotchi-server:sha-1a2b3c4
+# That skips the build entirely and redeploys the existing image. No separate
+# rollback tooling.
+#
+# !! The deploy job is a documented placeholder. No hosting account exists yet,
+# !! so nothing is actually shipped. See the TODO block in the `deploy` job.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: "Existing GHCR image to (re)deploy, e.g. ghcr.io/OWNER/lethalmagotchi-server:sha-1a2b3c4. Leave blank to build from the current ref."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-global
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-server
+
+jobs:
+  build-push:
+    name: Build and push image to GHCR
+    # Skip when redeploying an already-published image (rollback path).
+    if: >-
+      inputs.image_ref == '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      # workflow_run checks out the default branch by default — pin to the exact
+      # commit CI actually validated.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # Built-in token; no long-lived registry credential to manage.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR rejects uppercase image names and the repo slug (0x0E7/LethalMagotchi)
+      # has them. metadata-action lowercases its own output; this is for the digest
+      # reference we build by hand below.
+      - name: Lowercase image name
+        id: name
+        run: echo "image_name=$(echo "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.name.outputs.image_name }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Digest-pinned, so what deploys is byte-for-byte what CI validated.
+      - name: Resolve immutable image reference
+        id: ref
+        run: echo "image=${REGISTRY}/${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ steps.name.outputs.image_name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+  deploy:
+    name: Deploy to global server
+    needs: build-push
+    if: >-
+      !cancelled() &&
+      (needs.build-push.result == 'success' || needs.build-push.result == 'skipped') &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # Create this environment in repo settings to gate deploys on approval and
+    # to hold the PaaS token as an environment secret.
+    environment:
+      name: production
+
+    steps:
+      - name: Resolve image to deploy
+        id: image
+        run: |
+          IMAGE="${{ inputs.image_ref || needs.build-push.outputs.image }}"
+          if [ -z "$IMAGE" ]; then
+            echo "::error::No image to deploy."
+            exit 1
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Deploying: $IMAGE"
+
+      # ---------------------------------------------------------------------
+      # TODO(devops): wire the real hosting target. Nothing below is active.
+      #
+      # No PaaS account exists yet, so no credentials are invented here. When
+      # one is chosen (devops.md §5 assumes Fly.io/Railway/Render + managed
+      # Postgres on Neon/Supabase), the deploy is two steps, in this order:
+      #
+      #   1. Release-time migration — run ONCE, before the new image takes
+      #      traffic, never at container boot (boot-time migrations race across
+      #      replicas). Both commands are idempotent.
+      #        node apps/server/dist/db/migrate.js
+      #        node apps/server/dist/db/seed.js
+      #      On Fly this is fly.toml's `[deploy] release_command`; on
+      #      Railway/Render it's the pre-deploy command. Otherwise run it here
+      #      as a one-shot container against the production DATABASE_URL.
+      #
+      #   2. Roll out the exact digest:
+      #        flyctl deploy --image "${{ steps.image.outputs.image }}"
+      #      with FLY_API_TOKEN as a `production` environment secret. Fly does a
+      #      rolling replace and health-gates on /readyz (set that as the
+      #      [[http_service.checks]] path — /healthz never touches the DB and
+      #      would let a DB-less instance take traffic).
+      #
+      # Application secrets (DATABASE_URL, JWT_SECRET, COOKIE_SECURE=true,
+      # CLIENT_ORIGIN) live in the PaaS secret store and are set there directly.
+      # They must never pass through this workflow; the only secret CI holds is
+      # the deploy token.
+      # ---------------------------------------------------------------------
+      - name: Deploy (placeholder — no hosting target configured)
+        run: |
+          echo "::notice title=Deploy skipped::No PaaS target is configured yet."
+          echo "Image built and published, ready to deploy: ${{ steps.image.outputs.image }}"
+          echo "See the TODO block in .github/workflows/deploy.yml to wire this up."
+
+      - name: Post-deploy smoke check (placeholder)
+        run: |
+          echo "TODO: curl -fsS \"\$PUBLIC_URL/readyz\" once a public URL exists."
