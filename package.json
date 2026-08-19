@@ -1,0 +1,32 @@
+{
+  "name": "lethalmagotchi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w @lethalmagotchi/shared && npm run build -w @lethalmagotchi/server && npm run build -w @lethalmagotchi/client",
+    "dev": "npm run build -w @lethalmagotchi/shared && concurrently -n shared,server,client -c gray,blue,magenta \"npm run dev -w @lethalmagotchi/shared\" \"npm run dev -w @lethalmagotchi/server\" \"npm run dev -w @lethalmagotchi/client\"",
+    "typecheck": "npm run build -w @lethalmagotchi/shared && npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run db:migrate -w @lethalmagotchi/server",
+    "db:seed": "npm run db:seed -w @lethalmagotchi/server",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest --project unit",
+    "test:e2e": "npm run build && playwright test",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.7"
+  }
+}

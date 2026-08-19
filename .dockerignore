@@ -1,0 +1,53 @@
+# Keep the build context small and never leak local state or secrets into a layer.
+
+# Dependencies — reinstalled inside the image from the lockfile.
+node_modules
+**/node_modules
+
+# Build output — always rebuilt in the build stage.
+dist
+**/dist
+**/*.tsbuildinfo
+.vite
+**/.vite
+
+# Secrets and local config. .env MUST NOT enter the image; runtime config is env vars.
+.env
+.env.*
+!.env.example
+
+# VCS / CI / editor / OS noise.
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+**/.DS_Store
+
+# Docs and agent context — not needed to build or run the server.
+.claude
+docs
+*.md
+!README.md
+
+# Docker files themselves.
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Test suites and their config. The image never runs them, and tsc only compiles
+# src/, so leaving them out just keeps the build context small.
+**/tests
+**/e2e
+vitest.config.ts
+playwright.config.ts
+playwright-report
+test-results
+blob-report
+
+# Local scratch
+coverage
+**/coverage
+*.log
+npm-debug.log*

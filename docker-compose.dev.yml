@@ -1,0 +1,42 @@
+# LethalMagotchi — local dev database only (see .claude/devops.md §4).
+#
+# The contributor dev loop is host-native: Node 22 + `npm run dev` on your machine,
+# with Postgres in a container because it's the only real environmental dependency.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   npm ci
+#   npm run db:migrate && npm run db:seed
+#   npm run dev
+#
+# Credentials/port/db name match the committed .env.example exactly:
+#   DATABASE_URL=postgresql://lethal:lethal@localhost:5432/lethalmagotchi
+# so switching between this container and a native (e.g. Homebrew) Postgres 16
+# needs no env changes at all.
+#
+# Own project name + own volume, so it never collides with the full stack in
+# docker-compose.yml and its data survives independently.
+
+name: lethalmagotchi-dev
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lethal
+      POSTGRES_PASSWORD: lethal
+      POSTGRES_DB: lethalmagotchi
+    ports:
+      # Published on the host so the host-native server process can reach it.
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lethal -d lethalmagotchi"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  pgdata-dev:
