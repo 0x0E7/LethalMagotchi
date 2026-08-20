@@ -1,9 +1,12 @@
 import type {
+  ActionId,
+  ActionResponse,
   ApiErrorBody,
   ApiErrorCode,
   CharacterCreateInput,
   CharacterDto,
   MeResponse,
+  ShopItemId,
   ReferenceResponse,
   RefreshResponse,
   SessionResponse,
@@ -170,5 +173,12 @@ export const api = {
 
   createCharacter(input: CharacterCreateInput): Promise<{ character: CharacterDto }> {
     return request<{ character: CharacterDto }>('/characters', { method: 'POST', body: input });
+  },
+
+  performAction(action: ActionId, itemId: ShopItemId | null): Promise<ActionResponse> {
+    return request<ActionResponse>(`/characters/me/actions/${action}`, {
+      method: 'POST',
+      body: itemId ? { itemId } : {},
+    });
   },
 };

@@ -1,3 +1,4 @@
+import type { ActionId, ClipId, ShopItem, ShopItemId } from './actions.js';
 import type { Country } from './countries.js';
 import type {
   Occupation,
@@ -7,13 +8,7 @@ import type {
   Species,
   SpeciesId,
 } from './reference.js';
-
-export interface CharacterStats {
-  hunger: number;
-  hygiene: number;
-  energy: number;
-  mood: number;
-}
+import type { CharacterStats } from './stats.js';
 
 export interface AccountDto {
   id: string;
@@ -38,6 +33,22 @@ export interface CharacterDto {
   stats: CharacterStats;
   lastSimulatedAt: string;
   equippedCosmetics: string[];
+  lethalCoins: number;
+  actionCooldowns: Record<string, string>;
+}
+
+export interface ActionResultDto {
+  action: ActionId;
+  itemId: ShopItemId | null;
+  clipId: ClipId;
+  deltas: Partial<CharacterStats>;
+  coinsSpent: number;
+  cooldownEndsAt: string;
+}
+
+export interface ActionResponse {
+  character: CharacterDto;
+  result: ActionResultDto;
 }
 
 export interface SessionResponse {
@@ -63,6 +74,7 @@ export interface ReferenceResponse {
   personalities: Personality[];
   occupations: Occupation[];
   countries: Country[];
+  shopItems: ShopItem[];
 }
 
 export interface UsernameAvailabilityResponse {
@@ -81,6 +93,8 @@ export const API_ERROR_CODES = [
   'NO_CHARACTER',
   'BIO_REJECTED',
   'CREATE_LIMIT_REACHED',
+  'INSUFFICIENT_FUNDS',
+  'ACTION_ON_COOLDOWN',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;

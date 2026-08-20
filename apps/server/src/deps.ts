@@ -8,6 +8,7 @@ export interface Limiters {
   loginByUsername: RateLimiter;
   usernameLookup: RateLimiter;
   characterChurn: RateLimiter;
+  actions: RateLimiter;
 }
 
 export interface ServerDeps {
@@ -24,5 +25,6 @@ export function createLimiters(): Limiters {
     loginByUsername: new RateLimiter({ limit: 5, windowMs: 15 * 60_000 }),
     usernameLookup: new RateLimiter({ limit: 60, windowMs: 60_000 }),
     characterChurn: new RateLimiter({ limit: 5, windowMs: 24 * 60 * 60_000 }),
+    actions: new RateLimiter({ limit: 60, windowMs: 60_000 }),
   };
 }

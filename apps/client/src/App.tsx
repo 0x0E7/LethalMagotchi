@@ -2,7 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useSession } from './session/SessionProvider.js';
 import { AuthScreen } from './routes/AuthScreen.js';
 import { CreateFlow } from './routes/create/CreateFlow.js';
-import { PetScreen } from './routes/PetScreen.js';
+import { PetScreen } from './routes/pet/PetScreen.js';
 
 function Splash() {
   return (

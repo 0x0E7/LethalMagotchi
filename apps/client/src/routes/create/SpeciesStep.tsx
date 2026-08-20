@@ -1,24 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Species, SpeciesId } from '@lethalmagotchi/shared';
-
-const SPECIES_EMOJI: Record<string, string> = {
-  dog: '🐕',
-  cat: '🐈',
-  horse: '🐎',
-  cow: '🐄',
-  lion: '🦁',
-  fox: '🦊',
-  wolf: '🐺',
-  rabbit: '🐇',
-  otter: '🦦',
-  raccoon: '🦝',
-  bear: '🐻',
-  deer: '🦌',
-  goat: '🐐',
-  pig: '🐖',
-  frog: '🐸',
-  crow: '🐦‍⬛',
-};
+import { speciesArt } from '../../species-art.js';
 
 export function paceHints(species: Species): string[] {
   const { hunger, hygiene, energy, mood } = species.baseDecayRates;
@@ -128,7 +110,7 @@ export function SpeciesStep({ species, selected, onSelect, onNext, loading }: Pr
                 onFocus={() => setFocusIndex(index)}
               >
                 <span className="species-art" aria-hidden="true">
-                  {SPECIES_EMOJI[entry.id] ?? '❔'}
+                  {speciesArt(entry.id)}
                 </span>
                 <span className="species-name">{entry.displayName}</span>
                 <span className="species-flavor">{entry.flavor}</span>
@@ -146,7 +128,7 @@ export function SpeciesStep({ species, selected, onSelect, onNext, loading }: Pr
       {detail && (
         <div className="detail-strip" aria-live="polite">
           <span className="detail-art" aria-hidden="true">
-            {SPECIES_EMOJI[detail.id] ?? '❔'}
+            {speciesArt(detail.id)}
           </span>
           <div>
             <h3>{detail.displayName}</h3>

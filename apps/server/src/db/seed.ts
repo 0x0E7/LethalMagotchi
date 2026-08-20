@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { COUNTRIES, OCCUPATIONS, PERSONALITIES, SPECIES } from '@lethalmagotchi/shared';
+import { COUNTRIES, OCCUPATIONS, PERSONALITIES, SHOP_ITEMS, SPECIES } from '@lethalmagotchi/shared';
 import { loadConfig } from '../config.js';
 import { createPool, type Db } from './pool.js';
 
@@ -40,6 +40,20 @@ export async function seedReferenceData(db: Db): Promise<void> {
     );
   }
 
+  for (const [index, item] of SHOP_ITEMS.entries()) {
+    await db.query(
+      `INSERT INTO shop_items (id, action_id, display_name, cost, effects, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET
+         action_id = EXCLUDED.action_id,
+         display_name = EXCLUDED.display_name,
+         cost = EXCLUDED.cost,
+         effects = EXCLUDED.effects,
+         sort_order = EXCLUDED.sort_order`,
+      [item.id, item.actionId, item.displayName, item.cost, JSON.stringify(item.effects), index],
+    );
+  }
+
   for (const country of COUNTRIES) {
     await db.query(
       `INSERT INTO countries (code, display_name)
@@ -57,7 +71,7 @@ if (isEntrypoint) {
   try {
     await seedReferenceData(pool);
     console.log(
-      `seeded ${SPECIES.length} species, ${PERSONALITIES.length} personalities, ${OCCUPATIONS.length} occupations, ${COUNTRIES.length} countries`,
+      `seeded ${SPECIES.length} species, ${PERSONALITIES.length} personalities, ${OCCUPATIONS.length} occupations, ${SHOP_ITEMS.length} shop items, ${COUNTRIES.length} countries`,
     );
   } finally {
     await pool.end();

@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { ApiErrorBody } from '@lethalmagotchi/shared';
 import type { ServerDeps } from './deps.js';
 import { ApiError } from './errors.js';
+import { registerActionRoutes } from './routes/actions.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCharacterRoutes } from './routes/characters.js';
 import { registerReferenceRoutes } from './routes/reference.js';
@@ -98,6 +99,7 @@ export async function buildApp(deps: ServerDeps): Promise<FastifyInstance> {
 
   await registerAuthRoutes(app, deps);
   await registerCharacterRoutes(app, deps);
+  await registerActionRoutes(app, deps);
   await registerReferenceRoutes(app, deps);
 
   if (serveSpa) {
