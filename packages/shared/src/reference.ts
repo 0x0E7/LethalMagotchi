@@ -82,14 +82,14 @@ export interface Occupation {
   displayName: string;
 }
 
-const BASE: DecayRates = { hunger: 4, hygiene: 3, energy: 3.5, mood: 3 };
+export const BASE_DECAY_RATES: DecayRates = { hunger: 4, hygiene: 3, energy: 3.5, mood: 3 };
 
 function rates(hunger: number, hygiene: number, energy: number, mood: number): DecayRates {
   return {
-    hunger: round(BASE.hunger * hunger),
-    hygiene: round(BASE.hygiene * hygiene),
-    energy: round(BASE.energy * energy),
-    mood: round(BASE.mood * mood),
+    hunger: round(BASE_DECAY_RATES.hunger * hunger),
+    hygiene: round(BASE_DECAY_RATES.hygiene * hygiene),
+    energy: round(BASE_DECAY_RATES.energy * energy),
+    mood: round(BASE_DECAY_RATES.mood * mood),
   };
 }
 
@@ -150,4 +150,12 @@ export const OCCUPATIONS: Occupation[] = [
   { id: 'unemployed', displayName: 'Unemployed' },
 ];
 
-export const REFERENCE_VERSION = '1';
+export const SPECIES_BY_ID: Record<SpeciesId, Species> = Object.fromEntries(
+  SPECIES.map((entry) => [entry.id, entry]),
+) as Record<SpeciesId, Species>;
+
+export const PERSONALITIES_BY_ID: Record<PersonalityId, Personality> = Object.fromEntries(
+  PERSONALITIES.map((entry) => [entry.id, entry]),
+) as Record<PersonalityId, Personality>;
+
+export const REFERENCE_VERSION = '2';

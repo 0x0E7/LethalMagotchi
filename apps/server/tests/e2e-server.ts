@@ -51,6 +51,7 @@ function e2eLimiters(): Limiters {
     // The abuse guard stays at its production setting — it is keyed per account,
     // and each test uses a fresh account.
     characterChurn: new RateLimiter({ limit: 5, windowMs: 24 * 60 * 60_000 }),
+    actions: new RateLimiter({ limit: 60, windowMs: 60_000 }),
   };
 }
 

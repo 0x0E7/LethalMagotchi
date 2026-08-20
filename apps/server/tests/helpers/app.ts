@@ -61,7 +61,7 @@ export interface TestApp {
  * test. Suites that are actually about rate limiting opt into the real numbers
  * with `createTestApp({ realLimits: true })`.
  */
-function relaxedLimiters(): Limiters {
+export function relaxedLimiters(): Limiters {
   const generous = () => new RateLimiter({ limit: 100_000, windowMs: 60_000 });
   return {
     register: generous(),
@@ -69,6 +69,7 @@ function relaxedLimiters(): Limiters {
     loginByUsername: generous(),
     usernameLookup: generous(),
     characterChurn: generous(),
+    actions: generous(),
   };
 }
 

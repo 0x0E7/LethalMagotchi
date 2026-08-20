@@ -56,6 +56,24 @@ export async function login(page: Page, credentials: Credentials): Promise<void>
   await page.getByRole('button', { name: 'Log in' }).click();
 }
 
+/**
+ * Fastest route to the main screen: the character is made over the API and the
+ * browser only does the login, so action tests do not re-walk the creation flow.
+ */
+export async function startAtPetScreen(
+  page: Page,
+  request: APIRequestContext,
+  nickname = 'Bubbles',
+): Promise<Credentials> {
+  const credentials = await createAccount(request);
+  await createCharacterOutOfBand(request, credentials, nickname);
+  await login(page, credentials);
+
+  await expect(page).toHaveURL(/\/pet$/);
+  await expect(page.getByRole('heading', { name: nickname })).toBeVisible();
+  return credentials;
+}
+
 export async function registerViaUi(page: Page): Promise<Credentials> {
   const credentials = { username: uniqueUsername(), password: PASSWORD };
   await page.goto('/');

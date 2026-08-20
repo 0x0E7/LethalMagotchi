@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ACTION_IDS, SHOP_ITEM_IDS } from './actions.js';
 import { OCCUPATION_IDS, PERSONALITY_IDS, SPECIES_IDS } from './reference.js';
 import { isCountryCode } from './countries.js';
 import {
@@ -132,9 +133,24 @@ export const usernameAvailabilityQuerySchema = z.object({
   username: z.string().max(64),
 });
 
+export const actionParamsSchema = z.object({
+  action: z.enum(ACTION_IDS),
+});
+
+export const actionRequestSchema = z
+  .object({
+    itemId: z.enum(SHOP_ITEM_IDS).nullish(),
+  })
+  .strict()
+  .nullish()
+  .transform((value) => ({ itemId: value?.itemId ?? null }));
+
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
 export type CharacterCreateInput = z.input<typeof characterCreateSchema>;
 export type CharacterCreate = z.output<typeof characterCreateSchema>;
 export type CharacterPatchInput = z.input<typeof characterPatchSchema>;
 export type CharacterPatch = z.output<typeof characterPatchSchema>;
+export type ActionParams = z.output<typeof actionParamsSchema>;
+export type ActionRequestInput = z.input<typeof actionRequestSchema>;
+export type ActionRequestBody = z.output<typeof actionRequestSchema>;
