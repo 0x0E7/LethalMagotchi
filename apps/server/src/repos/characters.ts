@@ -1,4 +1,5 @@
 import {
+  STARTING_LETHAL_COINS,
   STARTING_STATS,
   normalizeStats,
   roundStats,
@@ -32,11 +33,14 @@ export interface CharacterRow {
   equipped_cosmetics: string[];
   lethal_coins: number;
   action_cooldowns: Record<string, string>;
+  tournament_opt_in: boolean;
+  tournament_wins: number;
+  seated_table_id: string | null;
+  rebirth_count: number;
+  last_rebirth_at: Date | null;
 }
 
-export { STARTING_STATS };
-
-export const STARTING_LETHAL_COINS = 5;
+export { STARTING_STATS, STARTING_LETHAL_COINS };
 
 export function simulatedStats(row: CharacterRow, now: number): CharacterStats {
   return simulateCharacter({
@@ -71,6 +75,11 @@ export function toCharacterDto(row: CharacterRow, now: number = Date.now()): Cha
     equippedCosmetics: row.equipped_cosmetics,
     lethalCoins: row.lethal_coins,
     actionCooldowns: row.action_cooldowns,
+    tournamentOptIn: row.tournament_opt_in,
+    tournamentWins: row.tournament_wins,
+    seatedTableId: row.seated_table_id,
+    rebirthCount: row.rebirth_count,
+    lastRebirthAt: row.last_rebirth_at ? row.last_rebirth_at.toISOString() : null,
   };
 }
 
@@ -185,6 +194,64 @@ export async function commitCharacterState(
     ],
   );
   return result.rows[0]!;
+}
+
+export async function lockCharacterById(client: DbClient, characterId: string): Promise<CharacterRow | null> {
+  const result = await client.query<CharacterRow>(
+    'SELECT * FROM characters WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
+    [characterId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function findCharacterById(db: Db, characterId: string): Promise<CharacterRow | null> {
+  const result = await db.query<CharacterRow>('SELECT * FROM characters WHERE id = $1', [characterId]);
+  return result.rows[0] ?? null;
+}
+
+export async function setTournamentOptIn(
+  db: Db,
+  accountId: string,
+  optIn: boolean,
+): Promise<CharacterRow | null> {
+  const result = await db.query<CharacterRow>(
+    `UPDATE characters SET tournament_opt_in = $2, updated_at = now()
+     WHERE account_id = $1 AND deleted_at IS NULL
+     RETURNING *`,
+    [accountId, optIn],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function setSeatedTable(
+  client: DbClient,
+  characterId: string,
+  tableId: string | null,
+): Promise<void> {
+  await client.query('UPDATE characters SET seated_table_id = $2, updated_at = now() WHERE id = $1', [
+    characterId,
+    tableId,
+  ]);
+}
+
+export async function creditCoins(
+  client: DbClient,
+  characterId: string,
+  coins: number,
+): Promise<CharacterRow> {
+  const result = await client.query<CharacterRow>(
+    `UPDATE characters SET lethal_coins = lethal_coins + $2, updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [characterId, coins],
+  );
+  return result.rows[0]!;
+}
+
+export async function recordTournamentWin(client: DbClient, characterId: string): Promise<void> {
+  await client.query(
+    'UPDATE characters SET tournament_wins = tournament_wins + 1, updated_at = now() WHERE id = $1',
+    [characterId],
+  );
 }
 
 export async function softDeleteCharacter(db: Db, accountId: string): Promise<boolean> {

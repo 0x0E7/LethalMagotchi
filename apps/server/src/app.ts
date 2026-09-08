@@ -12,6 +12,8 @@ import { registerActionRoutes } from './routes/actions.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCharacterRoutes } from './routes/characters.js';
 import { registerReferenceRoutes } from './routes/reference.js';
+import { registerTournamentRoutes } from './routes/tournaments.js';
+import { registerWebSocket } from './ws/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -33,7 +35,10 @@ export async function buildApp(deps: ServerDeps): Promise<FastifyInstance> {
   const { config, db } = deps;
   const app = Fastify({
     logger: config.nodeEnv === 'test' ? false : { level: config.nodeEnv === 'production' ? 'info' : 'debug' },
-    trustProxy: config.nodeEnv === 'production',
+    // Never a bare `true`: every per-IP defence in this server keys off `request.ip`, and
+    // `true` resolves that to the leftmost, client-supplied `X-Forwarded-For` entry — one
+    // header would then buy an attacker an unlimited number of distinct "addresses".
+    trustProxy: config.trustProxy,
   });
 
   await app.register(cors, { origin: config.clientOrigins, credentials: true });
@@ -97,10 +102,12 @@ export async function buildApp(deps: ServerDeps): Promise<FastifyInstance> {
     }
   });
 
+  await registerWebSocket(app, deps);
   await registerAuthRoutes(app, deps);
   await registerCharacterRoutes(app, deps);
   await registerActionRoutes(app, deps);
   await registerReferenceRoutes(app, deps);
+  await registerTournamentRoutes(app, deps);
 
   if (serveSpa) {
     await app.register(fastifyStatic, { root: path.resolve(config.clientDist as string) });

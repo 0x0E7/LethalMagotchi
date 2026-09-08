@@ -145,6 +145,8 @@ export const actionRequestSchema = z
   .nullish()
   .transform((value) => ({ itemId: value?.itemId ?? null }));
 
+export const tournamentOptInSchema = z.object({ optIn: z.boolean() }).strict();
+
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
 export type CharacterCreateInput = z.input<typeof characterCreateSchema>;
@@ -152,5 +154,6 @@ export type CharacterCreate = z.output<typeof characterCreateSchema>;
 export type CharacterPatchInput = z.input<typeof characterPatchSchema>;
 export type CharacterPatch = z.output<typeof characterPatchSchema>;
 export type ActionParams = z.output<typeof actionParamsSchema>;
+export type TournamentOptInInput = z.input<typeof tournamentOptInSchema>;
 export type ActionRequestInput = z.input<typeof actionRequestSchema>;
 export type ActionRequestBody = z.output<typeof actionRequestSchema>;

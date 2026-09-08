@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run build -w @lethalmagotchi/shared && npm run build -w @lethalmagotchi/server && npm run build -w @lethalmagotchi/client",
     "dev": "npm run build -w @lethalmagotchi/shared && concurrently -n shared,server,client -c gray,blue,magenta \"npm run dev -w @lethalmagotchi/shared\" \"npm run dev -w @lethalmagotchi/server\" \"npm run dev -w @lethalmagotchi/client\"",
-    "typecheck": "npm run build -w @lethalmagotchi/shared && npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build -w @lethalmagotchi/shared && npm run typecheck --workspaces --if-present && npm run typecheck:tests --workspaces --if-present",
     "db:migrate": "npm run db:migrate -w @lethalmagotchi/server",
     "db:seed": "npm run db:seed -w @lethalmagotchi/server",
     "test": "npm run test:unit && npm run test:integration",
@@ -24,6 +24,7 @@
     "test:all": "npm test && npm run test:e2e"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3",
