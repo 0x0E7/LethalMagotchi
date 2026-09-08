@@ -3,6 +3,7 @@ import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fas
 import type { CharacterCreateInput } from '@lethalmagotchi/shared';
 import { buildApp } from '../../src/app.js';
 import { createDummyHash } from '../../src/auth/passwords.js';
+import { ChatService } from '../../src/chat/service.js';
 import type { Config } from '../../src/config.js';
 import { DEFAULT_TOURNAMENT_CONFIG, REFRESH_COOKIE_NAME } from '../../src/config.js';
 import { createPool, type Db } from '../../src/db/pool.js';
@@ -62,6 +63,7 @@ export interface TestApp {
   config: Config;
   hub: Hub;
   tournaments: TournamentService;
+  chat: ChatService;
 }
 
 /**
@@ -82,6 +84,9 @@ export function relaxedLimiters(): Limiters {
     wsMessages: generous(),
     wsSource: generous(),
     wsResync: generous(),
+    chatBurst: generous(),
+    chatSustained: generous(),
+    chatDmCreate: generous(),
   };
 }
 
@@ -97,6 +102,7 @@ export async function createTestApp(
     limiters?: Limiters;
     hub?: Hub;
     tournaments?: TournamentService;
+    chat?: ChatService;
   } = {},
 ): Promise<TestApp> {
   const config = testConfig(options.config);
@@ -105,6 +111,7 @@ export async function createTestApp(
   const hub = options.hub ?? new Hub();
   const tournaments =
     options.tournaments ?? new TournamentService({ db, hub, config: config.tournament });
+  const chat = options.chat ?? new ChatService({ db, hub, limiters });
   const app = await buildApp({
     config,
     db,
@@ -112,8 +119,9 @@ export async function createTestApp(
     limiters,
     hub,
     tournaments,
+    chat,
   });
-  return { app, db, limiters, config, hub, tournaments };
+  return { app, db, limiters, config, hub, tournaments, chat };
 }
 
 /** Usernames must satisfy ^[a-z0-9_]{3,20}$; keep them unique so tests never collide. */

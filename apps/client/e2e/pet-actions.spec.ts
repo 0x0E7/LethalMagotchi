@@ -161,7 +161,9 @@ test('the live region coalesces a burst of announcements instead of flooding', a
 }) => {
   await startAtPetScreen(page, request);
   await page.selectOption('select[name="animationMode"]', 'off');
-  const live = page.locator('[aria-live="polite"]');
+  // The HUD's region specifically: the chat panel carries its own polite region for
+  // incoming messages, and the two must not be conflated.
+  const live = page.locator('.hud-live');
 
   await dockButton(page, 'study').click();
   await expect(live).toHaveText(/^Study\./);

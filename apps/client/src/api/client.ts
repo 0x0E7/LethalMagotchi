@@ -5,6 +5,9 @@ import type {
   ApiErrorCode,
   CharacterCreateInput,
   CharacterDto,
+  ChatChannelResponse,
+  ChatChannelsResponse,
+  ChatMessagesResponse,
   MeResponse,
   ShopItemId,
   ReferenceResponse,
@@ -193,6 +196,27 @@ export const api = {
       method: 'POST',
       body: { optIn },
     });
+  },
+
+  chatChannels(): Promise<ChatChannelsResponse> {
+    return request<ChatChannelsResponse>('/chat/channels');
+  },
+
+  openDm(targetAccountId: string): Promise<ChatChannelResponse> {
+    return request<ChatChannelResponse>('/chat/dm', { method: 'POST', body: { targetAccountId } });
+  },
+
+  chatMessages(channelId: string, before?: string): Promise<ChatMessagesResponse> {
+    const query = before ? `?before=${encodeURIComponent(before)}` : '';
+    return request<ChatMessagesResponse>(`/chat/channels/${channelId}/messages${query}`);
+  },
+
+  blockPlayer(blockedAccountId: string): Promise<void> {
+    return request<void>('/blocks', { method: 'POST', body: { blockedAccountId } });
+  },
+
+  unblockPlayer(blockedAccountId: string): Promise<void> {
+    return request<void>(`/blocks/${blockedAccountId}`, { method: 'DELETE' });
   },
 };
 

@@ -1,6 +1,7 @@
+import type { ChatService } from './chat/service.js';
 import type { Config } from './config.js';
 import type { Db } from './db/pool.js';
-import { RateLimiter } from './rate-limit.js';
+import { RateLimiter, type RateLimiterOptions } from './rate-limit.js';
 import type { TournamentService } from './tournament/service.js';
 import type { Hub } from './ws/hub.js';
 
@@ -14,6 +15,9 @@ export interface Limiters {
   wsMessages: RateLimiter;
   wsSource: RateLimiter;
   wsResync: RateLimiter;
+  chatBurst: RateLimiter;
+  chatSustained: RateLimiter;
+  chatDmCreate: RateLimiter;
 }
 
 export interface ServerDeps {
@@ -23,29 +27,57 @@ export interface ServerDeps {
   limiters: Limiters;
   hub: Hub;
   tournaments: TournamentService;
+  chat: ChatService;
 }
 
-export function createLimiters(): Limiters {
+/** `now` is injectable so a test can assert the *production* numbers, not a copy of them. */
+export function createLimiters(now?: () => number): Limiters {
+  const limiter = (options: Omit<RateLimiterOptions, 'now'>): RateLimiter =>
+    new RateLimiter({ ...options, ...(now ? { now } : {}) });
+
   return {
-    register: new RateLimiter({ limit: 5, windowMs: 60 * 60_000 }),
-    loginByIp: new RateLimiter({ limit: 10, windowMs: 15 * 60_000 }),
-    loginByUsername: new RateLimiter({ limit: 5, windowMs: 15 * 60_000 }),
-    usernameLookup: new RateLimiter({ limit: 60, windowMs: 60_000 }),
-    characterChurn: new RateLimiter({ limit: 5, windowMs: 24 * 60 * 60_000 }),
-    actions: new RateLimiter({ limit: 60, windowMs: 60_000 }),
+    register: limiter({ limit: 5, windowMs: 60 * 60_000 }),
+    loginByIp: limiter({ limit: 10, windowMs: 15 * 60_000 }),
+    loginByUsername: limiter({ limit: 5, windowMs: 15 * 60_000 }),
+    usernameLookup: limiter({ limit: 60, windowMs: 60_000 }),
+    characterChurn: limiter({ limit: 5, windowMs: 24 * 60 * 60_000 }),
+    actions: limiter({ limit: 60, windowMs: 60_000 }),
     // Per socket: a turn needs one message, and no honest client sends more than a handful
     // a second. `tourney:resync` gets its own tighter bucket because one of them costs a
     // hand evaluation and four or five outbound frames.
-    wsMessages: new RateLimiter({ limit: 120, windowMs: 10_000, maxBackoffMs: 60_000 }),
+    wsMessages: limiter({ limit: 120, windowMs: 10_000, maxBackoffMs: 60_000 }),
     // Per account, or per address while anonymous: every socket of one source shares this
     // budget, so opening more sockets or reconnecting buys no extra throughput. Its
     // escalation is what a reconnect must not clear, hence the strike decay instead.
-    wsSource: new RateLimiter({
+    wsSource: limiter({
       limit: 300,
       windowMs: 10_000,
       maxBackoffMs: 15 * 60_000,
       strikeDecayMs: 10 * 60_000,
     }),
-    wsResync: new RateLimiter({ limit: 10, windowMs: 10_000, maxBackoffMs: 60_000 }),
+    wsResync: limiter({ limit: 10, windowMs: 10_000, maxBackoffMs: 60_000 }),
+    // Per account, both charged on every send: the burst bucket is what a human typing fast
+    // brushes against, the sustained one is what a script runs into and cannot wait out by
+    // spacing its messages just over ten seconds apart.
+    //
+    // Both decay their strikes. This one is keyed by account and nothing ever resets it the
+    // way a socket close resets the connection-keyed buckets, so without a decay a player
+    // who types fast once an hour would carry that first strike for the process lifetime and
+    // pay a longer mute every time.
+    chatBurst: limiter({
+      limit: 5,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    chatSustained: limiter({
+      limit: 30,
+      windowMs: 60_000,
+      maxBackoffMs: 15 * 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    // Opening conversations is the mass-harassment primitive, not sending into ones that
+    // already exist — so only newly created DM channels are charged here.
+    chatDmCreate: limiter({ limit: 3, windowMs: 60 * 60_000 }),
   };
 }

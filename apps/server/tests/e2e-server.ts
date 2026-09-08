@@ -17,6 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from '../src/app.js';
 import { createDummyHash } from '../src/auth/passwords.js';
+import { ChatService } from '../src/chat/service.js';
 import type { Config } from '../src/config.js';
 import { DEFAULT_TOURNAMENT_CONFIG } from '../src/config.js';
 import { runMigrations } from '../src/db/migrate.js';
@@ -80,6 +81,15 @@ function e2eLimiters(): Limiters {
       strikeDecayMs: 10 * 60_000,
     }),
     wsResync: new RateLimiter({ limit: 10, windowMs: 10_000, maxBackoffMs: 60_000 }),
+    // Production settings: keyed per account, and each spec uses fresh accounts.
+    chatBurst: new RateLimiter({ limit: 5, windowMs: 10_000, maxBackoffMs: 60_000 }),
+    chatSustained: new RateLimiter({
+      limit: 30,
+      windowMs: 60_000,
+      maxBackoffMs: 15 * 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    chatDmCreate: new RateLimiter({ limit: 3, windowMs: 60 * 60_000 }),
   };
 }
 
@@ -91,14 +101,17 @@ const hub = new Hub();
 // The socket and the table protocol are the real thing; only the *scheduler* stays off
 // (never started), so no background tournament charges characters mid-spec.
 const tournaments = new TournamentService({ db, hub, config: config.tournament });
+const limiters = e2eLimiters();
+const chat = new ChatService({ db, hub, limiters });
 
 const app = await buildApp({
   config,
   db,
   dummyPasswordHash: await createDummyHash(),
-  limiters: e2eLimiters(),
+  limiters,
   hub,
   tournaments,
+  chat,
 });
 
 const shutdown = async () => {

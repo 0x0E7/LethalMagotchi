@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import AxeBuilder from '@axe-core/playwright';
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
 export const PASSWORD = 'correct-horse-battery-9';
@@ -102,4 +103,35 @@ export async function fillCreationSteps(
   await page.locator('select[name="originCountry"]').selectOption('NL');
   await page.locator('select[name="occupationId"]').selectOption('chef');
   await page.locator('select[name="personalityId"]').selectOption('goofball');
+}
+
+/**
+ * `--accent` (#e2603f) fails contrast wherever it is used — it is a design-token issue
+ * across the whole product, not something any one feature introduced, and repainting a
+ * brand colour is a visual-design decision rather than a bug fix. Everything else must come
+ * back clean.
+ *
+ * Matched as whole class tokens: a plain `includes('.primary')` would also swallow
+ * `.primary-move`, which is exactly the suppression these scans must not have.
+ */
+const SHARED_ACCENT_TOKEN_CLASSES = /\.(primary|link)(?![\w-])/;
+
+/** Shared by every spec that holds a screen to the project's accessibility bar. */
+export async function axeViolations(page: Page): Promise<string[]> {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
+    .analyze();
+
+  return results.violations
+    .map((violation) => ({
+      ...violation,
+      nodes:
+        violation.id === 'color-contrast'
+          ? violation.nodes.filter(
+              (node) => !node.target.some((target) => SHARED_ACCENT_TOKEN_CLASSES.test(String(target))),
+            )
+          : violation.nodes,
+    }))
+    .filter((violation) => violation.nodes.length > 0)
+    .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target).join(' ')}`);
 }

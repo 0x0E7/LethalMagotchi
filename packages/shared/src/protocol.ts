@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Card } from './cards.js';
+import { MESSAGE_RAW_MAX, type ChatChannelDto, type ChatMessageDto, type ChatRejectCode } from './chat.js';
 import type { CharacterStats } from './stats.js';
 import type { CharacterDto } from './types.js';
 import type {
@@ -23,12 +24,16 @@ export const WS_ERROR_CODES = [
   'UNAUTHENTICATED',
   'BAD_MESSAGE',
   'NOT_SEATED',
+  'NO_CHARACTER',
   'NOT_YOUR_TURN',
   'STALE_SEQ',
   'ILLEGAL_ACTION',
   'RATE_LIMITED',
 ] as const;
 export type WsErrorCode = (typeof WS_ERROR_CODES)[number];
+
+/** How many DM channels one socket may hold a live subscription to. */
+export const MAX_SUBSCRIBED_CHANNELS = 200;
 
 /* ------------------------------------------------------------------ *
  * Client -> server
@@ -47,6 +52,37 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('tourney:resync') }).strict(),
+  /**
+   * The author is the socket's bound account, never anything in here — a payload cannot
+   * name a sender, and `channelId` is checked against real membership before fan-out.
+   */
+  z
+    .object({
+      type: z.literal('chat:send'),
+      clientMsgId: z.string().min(1).max(64),
+      channelId: z.string().uuid(),
+      body: z.string().max(MESSAGE_RAW_MAX),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('chat:subscribe'),
+      channelIds: z.array(z.string().uuid()).max(MAX_SUBSCRIBED_CHANNELS),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('chat:unsubscribe'),
+      channelIds: z.array(z.string().uuid()).max(MAX_SUBSCRIBED_CHANNELS),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('chat:read'),
+      channelId: z.string().uuid(),
+      lastReadMessageId: z.string().uuid(),
+    })
+    .strict(),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -148,6 +184,15 @@ export type ServerMessage =
       stackCoins: number;
     }
   | { type: 'tourney:cancelled'; tournamentId: string; reason: 'NOT_ENOUGH_ENTRANTS' | 'SERVER_RESTART' }
-  | { type: 'tourney:rejected'; code: WsErrorCode; seq: number | null; message: string };
+  | { type: 'tourney:rejected'; code: WsErrorCode; seq: number | null; message: string }
+  /**
+   * Only ever sent to a socket whose account the server has just resolved as a member of
+   * `channelId` (or to every player, for the one channel whose membership is everyone).
+   */
+  | { type: 'chat:message'; channelId: string; message: ChatMessageDto }
+  | { type: 'chat:ack'; clientMsgId: string; messageId: string }
+  | { type: 'chat:rejected'; clientMsgId: string; code: ChatRejectCode; retryAfterMs?: number }
+  | { type: 'chat:channel'; channel: ChatChannelDto }
+  | { type: 'chat:unread'; channelId: string; unreadCount: number };
 
 export type ServerMessageType = ServerMessage['type'];
