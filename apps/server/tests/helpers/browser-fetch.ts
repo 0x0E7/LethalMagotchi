@@ -22,7 +22,11 @@ export function createFetchHarness(app: FastifyInstance): FetchHarness {
   const cookies = new Map<string, string>();
   const calls = new Map<string, number>();
 
-  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  // Narrower than `typeof fetch`'s real `RequestInfo | URL` on purpose — this harness only
+  // ever stringifies `input`, never inspects a `Request` object, and `RequestInfo` isn't
+  // available under this project's `lib` (no DOM lib in the server config). The cast on
+  // return bridges the gap for callers that need the full `typeof fetch` shape.
+  const fetchImpl = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     const path = url.split('?')[0]!;
     calls.set(path, (calls.get(path) ?? 0) + 1);

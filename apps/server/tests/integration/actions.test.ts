@@ -53,7 +53,7 @@ async function newPlayer(overrides: Record<string, unknown> = {}): Promise<Playe
 function fire(
   player: TestAccount,
   action: string,
-  payload: unknown = {},
+  payload: Record<string, unknown> = {},
 ): Promise<LightMyRequestResponse> {
   return app.inject(
     authed(player, { method: 'POST', url: `/api/v1/characters/me/actions/${action}`, payload }),

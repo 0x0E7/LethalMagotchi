@@ -83,6 +83,11 @@ services:
       # Plain HTTP on localhost, so Secure cookies would never be sent back.
       # Set COOKIE_SECURE=true in .env once you put this behind TLS.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Nothing sits in front of this container here — the port is published directly — so
+      # X-Forwarded-For is pure client input and must not be believed. Set this to the
+      # proxy's addresses/CIDRs at the same time you put a reverse proxy in front; see
+      # docs/ops/runbook.md §3.
+      TRUST_PROXY: ${TRUST_PROXY:-false}
       # Required, no default on purpose — fail loudly rather than ship a known secret.
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (min 16 chars) — see .env.example}
     ports:

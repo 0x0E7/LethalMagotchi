@@ -9,6 +9,7 @@ import type {
   SpeciesId,
 } from './reference.js';
 import type { CharacterStats } from './stats.js';
+import type { TournamentEntryDto, TournamentSummary } from './tournament.js';
 
 export interface AccountDto {
   id: string;
@@ -35,6 +36,11 @@ export interface CharacterDto {
   equippedCosmetics: string[];
   lethalCoins: number;
   actionCooldowns: Record<string, string>;
+  tournamentOptIn: boolean;
+  tournamentWins: number;
+  seatedTableId: string | null;
+  rebirthCount: number;
+  lastRebirthAt: string | null;
 }
 
 export interface ActionResultDto {
@@ -83,6 +89,29 @@ export interface UsernameAvailabilityResponse {
   suggestions: string[];
 }
 
+export interface TournamentStatusResponse {
+  now: string;
+  tournament: TournamentSummary | null;
+  entry: TournamentEntryDto | null;
+  /**
+   * Carried here so the entry-risk warning is never computed from a wallet the client
+   * last heard about over a socket that has since dropped: entry can end in a rebirth,
+   * and the player has to be told which one they are about to take.
+   */
+  character: CharacterDto | null;
+  blackout: boolean;
+  /** Israel-local 10:00 when in blackout, so the chip can say when play resumes. */
+  resumesAt: string | null;
+  nextSlotAt: string;
+  entryFeeCoins: number;
+  missPenaltyCoins: number;
+}
+
+export interface TournamentOptInResponse {
+  character: CharacterDto;
+  tournament: TournamentSummary | null;
+}
+
 export const API_ERROR_CODES = [
   'VALIDATION_FAILED',
   'INVALID_CREDENTIALS',
@@ -95,6 +124,7 @@ export const API_ERROR_CODES = [
   'CREATE_LIMIT_REACHED',
   'INSUFFICIENT_FUNDS',
   'ACTION_ON_COOLDOWN',
+  'CHARACTER_SEATED',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;

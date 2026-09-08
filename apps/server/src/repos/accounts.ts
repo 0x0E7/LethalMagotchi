@@ -1,5 +1,5 @@
 import type { AccountDto } from '@lethalmagotchi/shared';
-import type { Db } from '../db/pool.js';
+import type { Db, DbClient } from '../db/pool.js';
 import { uuidv7 } from '../uuid.js';
 
 export interface AccountRow {
@@ -49,6 +49,15 @@ export async function findAccountByNormalizedUsername(
 export async function findAccountById(db: Db, id: string): Promise<AccountRow | null> {
   const result = await db.query<AccountRow>('SELECT * FROM accounts WHERE id = $1', [id]);
   return result.rows[0] ?? null;
+}
+
+/** Cosmetics are account-scoped so a champion's crown survives the character's death. */
+export async function grantCosmetic(client: DbClient, accountId: string, cosmeticId: string): Promise<void> {
+  await client.query(
+    `UPDATE accounts SET owned_cosmetics = array_append(owned_cosmetics, $2)
+     WHERE id = $1 AND NOT (owned_cosmetics @> ARRAY[$2]::text[])`,
+    [accountId, cosmeticId],
+  );
 }
 
 export async function touchLastLogin(db: Db, accountId: string): Promise<void> {

@@ -15,9 +15,13 @@ import {
 import { ApiRequestError, NetworkError } from '../../api/client.js';
 import { useReference } from '../../hooks/useReference.js';
 import { useSession } from '../../session/SessionProvider.js';
+import { useTournament } from '../../tournament/TournamentProvider.js';
+import { OutcomeCard } from '../poker/OutcomeCard.js';
 import { ActionDock } from './ActionDock.js';
 import { Hud } from './Hud.js';
 import { PetStage } from './PetStage.js';
+import { RebirthCard } from './RebirthCard.js';
+import { TournamentStrip } from './TournamentStrip.js';
 import { useAnnouncer, useLiveStats, useNow } from './hooks.js';
 import { ANIMATION_MODES, ANIMATION_MODE_LABELS, useAnimationMode, usePrefersReducedMotion } from './settings.js';
 import { useActionMachine } from './useActionMachine.js';
@@ -54,6 +58,7 @@ function errorMessage(error: unknown): string {
 
 export function PetScreen({ character }: { character: CharacterDto }) {
   const { account, logout, setCharacter } = useSession();
+  const { outcome, rebirth, entryNotice, dismissEntryNotice } = useTournament();
   const { data: reference } = useReference();
   const location = useLocation();
   const [animationMode, setAnimationMode] = useAnimationMode();
@@ -134,6 +139,8 @@ export function PetScreen({ character }: { character: CharacterDto }) {
         </div>
 
         <div className="pet-topbar-right">
+          <TournamentStrip character={character} />
+
           <span
             className={character.lethalCoins <= 2 ? 'coin-chip low' : 'coin-chip'}
             aria-label={`${character.lethalCoins} LethalCoins`}
@@ -169,6 +176,18 @@ export function PetScreen({ character }: { character: CharacterDto }) {
         </div>
       )}
 
+      {entryNotice && (
+        <div className="banner" role="status">
+          {character.nickname} is in.{' '}
+          {entryNotice.hpConverted > 0
+            ? `${Math.round(entryNotice.hpConverted)}% HP was converted to cover the entry.`
+            : 'Three coins are on the table.'}{' '}
+          <button type="button" className="link" onClick={dismissEntryNotice}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <main className="pet-main">
         <PetStage
           character={character}
@@ -192,6 +211,9 @@ export function PetScreen({ character }: { character: CharacterDto }) {
         onFire={machine.fire}
         onNote={setNote}
       />
+
+      {rebirth && <RebirthCard character={character} />}
+      {!rebirth && outcome && <OutcomeCard outcome={outcome} youId={character.id} />}
     </div>
   );
 }

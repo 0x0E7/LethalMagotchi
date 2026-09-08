@@ -10,6 +10,8 @@ import type {
   ReferenceResponse,
   RefreshResponse,
   SessionResponse,
+  TournamentOptInResponse,
+  TournamentStatusResponse,
   UsernameAvailabilityResponse,
 } from '@lethalmagotchi/shared';
 
@@ -181,4 +183,26 @@ export const api = {
       body: itemId ? { itemId } : {},
     });
   },
+
+  tournamentStatus(): Promise<TournamentStatusResponse> {
+    return request<TournamentStatusResponse>('/tournaments/current');
+  },
+
+  setTournamentOptIn(optIn: boolean): Promise<TournamentOptInResponse> {
+    return request<TournamentOptInResponse>('/characters/me/tournament-optin', {
+      method: 'POST',
+      body: { optIn },
+    });
+  },
 };
+
+/**
+ * The WS handshake needs a live access token, and the socket authenticates with its
+ * first message rather than a query string — so a token never lands in a URL or a
+ * proxy log. Refreshing here reuses the same single-flight rotation as HTTP.
+ */
+export async function currentAccessToken(): Promise<string | null> {
+  if (accessToken) return accessToken;
+  const refreshed = await tryRefresh();
+  return refreshed ? accessToken : null;
+}

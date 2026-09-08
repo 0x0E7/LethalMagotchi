@@ -65,6 +65,27 @@ never enters the image (`.dockerignore`).
 | `CLIENT_ORIGIN` | no | comma-separated CORS origins |
 | `COOKIE_SECURE` | no | **must be `true` in production** |
 | `CLIENT_DIST` | no | baked to `/app/public` in the image; enables same-origin SPA |
+| `TRUST_PROXY` | no | default `false`. See below — getting this wrong disables every per-IP limit |
+
+`TRUST_PROXY` decides how `request.ip` is derived, and `request.ip` is what the login,
+registration and websocket flood limits are keyed on.
+
+| Deployment | Value |
+|---|---|
+| Node process reachable directly (the default compose stack) | `false` |
+| Behind a reverse proxy / load balancer | that proxy's addresses or CIDRs, comma-separated |
+
+`request.ip` then resolves to the last hop the *trusted* proxy appended, not to whatever the
+client put at the front of the header.
+
+Two values are rejected at startup rather than accepted quietly:
+- `true` — resolves `request.ip` to the leftmost `X-Forwarded-For` entry, which is
+  attacker-controlled even when a real proxy correctly appends its own hop, so any client
+  could mint unlimited distinct "addresses" and walk past every per-IP limit.
+- a bare hop count (`1`, `2`, …) — Fastify 5 reads a numeric `trustProxy` as *trust
+  nothing*, so it would silently do the opposite of what it looks like.
+
+When adding a proxy, set `TRUST_PROXY` in the same change.
 
 Production secrets live in the PaaS secret store, set there directly. They must never pass
 through CI — the only secret CI holds is a deploy token.

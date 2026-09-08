@@ -1,8 +1,49 @@
 {
-  "hash": "a6ca5b59",
+  "hash": "1d469fcb",
   "configHash": "37302048",
-  "lockfileHash": "5c9c59ce",
-  "browserHash": "4953d2e7",
-  "optimized": {},
-  "chunks": {}
+  "lockfileHash": "5be0742c",
+  "browserHash": "bd992a24",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "f5ecbb47",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "d7b314c6",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "c9cb55d8",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../../../node_modules/react-router-dom/dist/index.js",
+      "file": "react-router-dom.js",
+      "fileHash": "b932c988",
+      "needsInterop": false
+    },
+    "zod": {
+      "src": "../../../../node_modules/zod/index.js",
+      "file": "zod.js",
+      "fileHash": "55e0d973",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-TRZZGTW3": {
+      "file": "chunk-TRZZGTW3.js"
+    },
+    "chunk-Q5GEKUFB": {
+      "file": "chunk-Q5GEKUFB.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
 }

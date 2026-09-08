@@ -56,6 +56,11 @@ export async function registerActionRoutes(app: FastifyInstance, deps: ServerDep
     const payload = await withTransaction(db, async (client) => {
       const row = await lockActiveCharacterByAccount(client, request.accountId);
       if (!row) throw new ApiError(404, 'NO_CHARACTER', 'You do not have a character yet.');
+      // A seated character's coins are escrowed at the table; spending them here would
+      // mean the same coin is in two places at once.
+      if (row.seated_table_id) {
+        throw new ApiError(409, 'CHARACTER_SEATED', 'You are at a table right now.');
+      }
 
       const now = Date.now();
       const outcome = resolveAction(

@@ -111,6 +111,134 @@ describe('RateLimiter — exponential backoff', () => {
   });
 });
 
+describe('RateLimiter — strike decay', () => {
+  it('keeps escalating while the abuse continues', () => {
+    const clock = fakeClock();
+    const limiter = new RateLimiter({ limit: 1, windowMs: 1_000, strikeDecayMs: 60_000, now: clock.now });
+
+    limiter.check('ip');
+    expect(limiter.check('ip').retryAfterSeconds).toBe(1);
+    clock.advance(1_000);
+    limiter.check('ip');
+    expect(limiter.check('ip').retryAfterSeconds).toBe(2);
+  });
+
+  it('forgives strikes only after the key has gone quiet', () => {
+    const clock = fakeClock();
+    const limiter = new RateLimiter({ limit: 1, windowMs: 1_000, strikeDecayMs: 60_000, now: clock.now });
+
+    limiter.check('ip');
+    expect(limiter.check('ip').retryAfterSeconds).toBe(1);
+
+    clock.advance(60_000);
+    limiter.check('ip');
+    // Back to a first-offence block rather than the doubled one.
+    expect(limiter.check('ip').retryAfterSeconds).toBe(1);
+  });
+
+  it('does not let a flooder idle out its own escalation by hammering through the block', () => {
+    const clock = fakeClock();
+    const limiter = new RateLimiter({ limit: 1, windowMs: 1_000, strikeDecayMs: 5_000, now: clock.now });
+
+    limiter.check('ip');
+    limiter.check('ip');
+    // Eight seconds of steady hammering — well past the five-second decay, but never quiet.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      clock.advance(400);
+      limiter.check('ip');
+    }
+    limiter.check('ip');
+    expect(limiter.check('ip').retryAfterSeconds).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * The sweep that keeps the map bounded used to delete any entry whose block had expired —
+ * but an entry *is* its strike history, so on a busy server (the sweep only runs from a
+ * thousand keys up) every patient attacker was handed a first-offence backoff forever.
+ */
+describe('RateLimiter — strike history vs. the cleanup sweep', () => {
+  /** Flood, wait out exactly the block, repeat. Returns the backoff each round earned. */
+  function backoffPerOffence(limiter: RateLimiter, clock: ReturnType<typeof fakeClock>, rounds: number): number[] {
+    const seen: number[] = [];
+    for (let round = 0; round < rounds; round += 1) {
+      limiter.check('attacker');
+      const blocked = limiter.check('attacker');
+      seen.push(blocked.retryAfterSeconds);
+      clock.advance(blocked.retryAfterSeconds * 1000);
+    }
+    return seen;
+  }
+
+  const escalating = (clock: ReturnType<typeof fakeClock>) =>
+    new RateLimiter({
+      limit: 1,
+      windowMs: 10_000,
+      maxBackoffMs: 15 * 60_000,
+      strikeDecayMs: 10 * 60_000,
+      now: clock.now,
+    });
+
+  it('escalates on a quiet server', () => {
+    const clock = fakeClock();
+    expect(backoffPerOffence(escalating(clock), clock, 5)).toEqual([10, 20, 40, 80, 160]);
+  });
+
+  it('escalates identically on a busy one, past the sweep threshold', () => {
+    const clock = fakeClock();
+    const limiter = escalating(clock);
+    for (let key = 0; key < 1_200; key += 1) limiter.check(`legit-${key}`);
+
+    expect(backoffPerOffence(limiter, clock, 5)).toEqual([10, 20, 40, 80, 160]);
+  });
+
+  it('still forgets the keys it is safe to forget', () => {
+    const clock = fakeClock();
+    const limiter = escalating(clock);
+    for (let key = 0; key < 1_200; key += 1) limiter.check(`legit-${key}`);
+    expect(limiter.size()).toBe(1_200);
+
+    // Long past both the window and the strike decay, and none of them ever offended.
+    clock.advance(11 * 60_000);
+    limiter.check('anyone');
+
+    expect(limiter.size()).toBe(1);
+  });
+
+  it('keeps a striked key through a sweep and drops it once its strikes have decayed', () => {
+    const clock = fakeClock();
+    const limiter = escalating(clock);
+    limiter.check('attacker');
+    limiter.check('attacker');
+    for (let key = 0; key < 1_200; key += 1) limiter.check(`legit-${key}`);
+
+    clock.advance(60_000);
+    limiter.check('sweep-trigger');
+    expect(limiter.size()).toBeGreaterThan(1);
+    // Survived the sweep with its history intact: this is a second offence, not a first.
+    limiter.check('attacker');
+    expect(limiter.check('attacker').retryAfterSeconds).toBe(20);
+
+    clock.advance(10 * 60_000);
+    limiter.check('sweep-trigger');
+    expect(limiter.check('attacker').allowed).toBe(true);
+  });
+
+  it('bounds the map even for a limiter whose strikes never decay', () => {
+    const clock = fakeClock();
+    const limiter = new RateLimiter({ limit: 1, windowMs: 1_000, maxEntries: 2_000, now: clock.now });
+    for (let key = 0; key < 5_000; key += 1) {
+      limiter.check(`abuser-${key}`);
+      limiter.check(`abuser-${key}`);
+      clock.advance(10);
+    }
+    clock.advance(60_000);
+    limiter.check('sweep-trigger');
+
+    expect(limiter.size()).toBeLessThanOrEqual(2_001);
+  });
+});
+
 describe('RateLimiter — reset', () => {
   it('clears a single key without touching the others', () => {
     const clock = fakeClock();

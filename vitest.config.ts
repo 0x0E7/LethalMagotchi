@@ -13,6 +13,14 @@ const alias = {
 
 export default defineConfig({
   test: {
+    /**
+     * Integration tests share one Postgres database, and registration close deliberately
+     * charges *every* character in it — so two integration files running at once corrupt
+     * each other's population. This is a runner-level option: set inside a project it is
+     * silently ignored, which is why it lives here rather than next to the project that
+     * needs it.
+     */
+    fileParallelism: false,
     projects: [
       {
         resolve: { alias },
@@ -29,9 +37,6 @@ export default defineConfig({
           environment: 'node',
           include: ['apps/server/tests/integration/**/*.test.ts'],
           globalSetup: ['./apps/server/tests/helpers/global-setup.ts'],
-          // Integration tests share one Postgres database. Files run serially so a
-          // failure points at one scenario rather than at connection contention.
-          fileParallelism: false,
           testTimeout: 30_000,
           hookTimeout: 60_000,
         },

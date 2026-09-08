@@ -4,10 +4,12 @@ import type { CharacterCreateInput } from '@lethalmagotchi/shared';
 import { buildApp } from '../../src/app.js';
 import { createDummyHash } from '../../src/auth/passwords.js';
 import type { Config } from '../../src/config.js';
-import { REFRESH_COOKIE_NAME } from '../../src/config.js';
+import { DEFAULT_TOURNAMENT_CONFIG, REFRESH_COOKIE_NAME } from '../../src/config.js';
 import { createPool, type Db } from '../../src/db/pool.js';
 import { createLimiters, type Limiters } from '../../src/deps.js';
 import { RateLimiter } from '../../src/rate-limit.js';
+import { TournamentService } from '../../src/tournament/service.js';
+import { Hub } from '../../src/ws/hub.js';
 import { TEST_DATABASE_URL, TEST_JWT_SECRET } from './env.js';
 
 /** One pool per test *file* (vitest worker), closed by `closeTestPool` in afterAll. */
@@ -42,8 +44,13 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     clientOrigins: ['http://localhost:5173'],
     cookieSecure: false,
     clientDist: undefined,
+    trustProxy: false,
     accessTokenTtlSeconds: 15 * 60,
     refreshTokenTtlSeconds: 30 * 24 * 60 * 60,
+    // Off by default: a background scheduler charging every character in the shared test
+    // database would move coins under tests that are about something else entirely.
+    // Tournament suites construct their own service with an injected clock.
+    tournament: { ...DEFAULT_TOURNAMENT_CONFIG, enabled: false },
     ...overrides,
   };
 }
@@ -53,6 +60,8 @@ export interface TestApp {
   db: Db;
   limiters: Limiters;
   config: Config;
+  hub: Hub;
+  tournaments: TournamentService;
 }
 
 /**
@@ -70,6 +79,9 @@ export function relaxedLimiters(): Limiters {
     usernameLookup: generous(),
     characterChurn: generous(),
     actions: generous(),
+    wsMessages: generous(),
+    wsSource: generous(),
+    wsResync: generous(),
   };
 }
 
@@ -79,13 +91,29 @@ export function relaxedLimiters(): Limiters {
  * callers drive it with `app.inject()`.
  */
 export async function createTestApp(
-  options: { config?: Partial<Config>; realLimits?: boolean; limiters?: Limiters } = {},
+  options: {
+    config?: Partial<Config>;
+    realLimits?: boolean;
+    limiters?: Limiters;
+    hub?: Hub;
+    tournaments?: TournamentService;
+  } = {},
 ): Promise<TestApp> {
   const config = testConfig(options.config);
   const db = testPool();
   const limiters = options.limiters ?? (options.realLimits ? createLimiters() : relaxedLimiters());
-  const app = await buildApp({ config, db, dummyPasswordHash: await dummyHash(), limiters });
-  return { app, db, limiters, config };
+  const hub = options.hub ?? new Hub();
+  const tournaments =
+    options.tournaments ?? new TournamentService({ db, hub, config: config.tournament });
+  const app = await buildApp({
+    config,
+    db,
+    dummyPasswordHash: await dummyHash(),
+    limiters,
+    hub,
+    tournaments,
+  });
+  return { app, db, limiters, config, hub, tournaments };
 }
 
 /** Usernames must satisfy ^[a-z0-9_]{3,20}$; keep them unique so tests never collide. */

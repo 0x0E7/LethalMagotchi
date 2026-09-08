@@ -1075,3 +1075,773 @@ button.primary {
     transition-duration: 120ms !important;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Tournament chip, join strip, tiered confirmation
+ * ------------------------------------------------------------------ */
+
+.tourney-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.tourney-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tourney-chip.live {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+/* Blackout removes accent and motion rather than adding a banner: a live countdown to
+   a non-event would itself read as a call to action. */
+.tourney-chip.quiet {
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.tourney-chip .chip.joined {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tourney-chip .chip.offline {
+  background: #f0e6dd;
+  color: #8a5a05;
+}
+
+.join-strip {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  max-width: 340px;
+}
+
+.join-copy {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+.join-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.join-actions.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.join-strip button.primary,
+.join-popover button.primary {
+  width: auto;
+}
+
+button.primary.danger {
+  background: var(--danger);
+}
+
+.join-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  width: 260px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+  font-size: 0.85rem;
+}
+
+.join-popover p {
+  margin: 0;
+}
+
+/* Serious states are still: no springs, no bounce. */
+.modal-backdrop.still,
+.modal-backdrop.still * {
+  animation: none !important;
+  transition: none !important;
+}
+
+.confirm-entry {
+  width: min(460px, 94vw);
+  text-align: left;
+}
+
+.confirm-entry.lethal {
+  border-top: 5px solid var(--danger);
+}
+
+.hp-arithmetic {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  margin: 14px 0;
+}
+
+.hp-before {
+  font-weight: 700;
+}
+
+.hp-after {
+  font-weight: 800;
+  color: #8a5a05;
+}
+
+.hp-after.gone {
+  color: var(--danger);
+}
+
+.lethal-copy {
+  background: #fbe4e2;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.hold-confirm {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-weight: 600;
+  touch-action: none;
+}
+
+.hold-fill {
+  position: absolute;
+  inset: 0 100% 0 0;
+  background: var(--danger);
+  opacity: 0.18;
+}
+
+.hold-confirm.holding .hold-fill {
+  inset: 0 0 0 0;
+  transition: inset 800ms linear;
+}
+
+.rebirth-card {
+  width: min(420px, 94vw);
+  text-align: center;
+}
+
+.rebirth-mark {
+  font-size: 3rem;
+  margin: 0 0 4px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Poker table — a warm parlour, not a casino
+ * ------------------------------------------------------------------ */
+
+.poker-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 14px;
+  padding: 16px 20px 22px;
+  background: radial-gradient(120% 80% at 50% 0%, #4a3350 0%, #2c2230 60%);
+  color: #fdf7f1;
+}
+
+.poker-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.poker-topbar h1 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.poker-topbar .muted {
+  color: #cbbcc9;
+}
+
+.poker-pot {
+  display: grid;
+  justify-items: end;
+}
+
+.poker-pot-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #cbbcc9;
+}
+
+.poker-pot-value {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.poker-felt {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  align-content: center;
+  justify-items: center;
+  background: #2f5d4f;
+  border: 8px solid #3d3040;
+  border-radius: 140px / 70px;
+  padding: 26px 20px;
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.35);
+}
+
+.seat-arc {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.seat {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  min-width: 168px;
+  background: rgba(253, 247, 241, 0.94);
+  color: var(--ink);
+  border: 2px solid transparent;
+  border-radius: 16px;
+  padding: 8px 10px;
+}
+
+.seat.acting {
+  border-color: var(--accent);
+}
+
+/* The turn timer is a draining edge on the active portrait, not a chrome countdown. */
+.seat.acting::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: var(--turn-progress, 100%);
+  background: var(--accent);
+  border-radius: 0 0 14px 14px;
+}
+
+.seat.folded {
+  opacity: 0.5;
+}
+
+.seat.away {
+  border-style: dashed;
+  border-color: #b9a9b6;
+}
+
+.seat.you {
+  min-width: 220px;
+}
+
+.seat-portrait {
+  position: relative;
+  font-size: 2rem;
+  line-height: 1;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border-radius: 50%;
+}
+
+.seat-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -6px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 1px 5px;
+  background: var(--ink);
+  color: #fff;
+}
+
+/* 5.1:1 against the white badge text; the previous #4d8b8f only reached 3.9:1. */
+.seat-badge.blind {
+  background: #3f767a;
+  left: -8px;
+  right: auto;
+}
+
+.seat-info {
+  display: grid;
+  gap: 1px;
+}
+
+.seat-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.seat-stack {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+
+.seat-away,
+.seat-allin {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.seat-allin {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.seat-bet {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  background: #d9932a;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.seat-cards {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+}
+
+.seat-hand {
+  grid-column: 1 / -1;
+  font-size: 0.74rem;
+  color: var(--ink-muted);
+}
+
+.board {
+  display: flex;
+  gap: 8px;
+}
+
+.showdown-caption {
+  margin: 0;
+  background: rgba(44, 34, 48, 0.75);
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 0.92rem;
+  text-align: center;
+  max-width: 46ch;
+}
+
+/* Cards: genre-standard glyphs and colours, house style only at the frame. */
+.pcard {
+  display: inline-grid;
+  place-items: center;
+  background: #fff;
+  color: #1b1b1b;
+  border: 1px solid #d8cfc8;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: 1;
+  /* A deal is a straight slide, never a flourish. */
+  animation: card-in 180ms ease-out;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.pcard.red {
+  color: #c02a26;
+}
+
+.pcard.sm {
+  width: 30px;
+  height: 42px;
+  font-size: 0.78rem;
+}
+
+.pcard.md {
+  width: 46px;
+  height: 64px;
+  font-size: 1rem;
+}
+
+.pcard.lg {
+  width: 70px;
+  height: 98px;
+  font-size: 1.5rem;
+}
+
+.pcard-suit {
+  font-size: 1.15em;
+}
+
+.pcard.back {
+  background: repeating-linear-gradient(45deg, #6b4a72, #6b4a72 5px, #573c5d 5px, #573c5d 10px);
+  border-color: #46304a;
+}
+
+.pcard.slot {
+  background: rgba(255, 255, 255, 0.06);
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.25);
+  animation: none;
+}
+
+.your-seat {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.your-cards {
+  display: flex;
+  gap: 8px;
+}
+
+.best-hand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.poker-actions {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.poker-waiting {
+  margin: 0;
+  color: #cbbcc9;
+  font-size: 0.9rem;
+}
+
+.turn-timer {
+  width: min(420px, 90vw);
+  height: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.turn-timer i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  /* Linear, matching the server's absolute deadline — never a spring. */
+  transition: width 200ms linear;
+}
+
+.turn-countdown {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Betting bar reuses the action dock's geometry so muscle memory transfers. */
+.bet-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.bet-slot {
+  position: relative;
+}
+
+.bet-shortcuts {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #cbbcc9;
+}
+
+.bet-shortcuts kbd {
+  font-family: var(--font-body);
+  font-weight: 700;
+  border: 1px solid rgba(253, 247, 241, 0.45);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+
+/* No keyboard, no shortcut worth advertising. */
+@media (hover: none) {
+  .bet-shortcuts {
+    display: none;
+  }
+}
+
+.bet-button {
+  min-width: 112px;
+  padding: 12px 18px;
+  font-weight: 700;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+/**
+ * Check/Call is the most-pressed control at the table and is white-on-accent at 16px
+ * bold, which does not qualify for the large-text carve-out: `--accent` (#e2603f) gives
+ * 3.51:1 against white. This shade of the same hue gives 5.57:1. Scoped to this button on
+ * purpose — repainting the shared `--accent` token is a design-system decision, not a
+ * poker fix.
+ */
+.bet-button.primary-move {
+  background: #b83f22;
+  color: #fff;
+  border-color: transparent;
+}
+
+.bet-button.fold {
+  background: transparent;
+  color: #fdf7f1;
+  border-color: rgba(253, 247, 241, 0.4);
+  box-shadow: none;
+}
+
+.bet-button.raise {
+  position: relative;
+  box-shadow:
+    var(--shadow),
+    5px -5px 0 -1px var(--accent-soft),
+    5px -5px 0 0 var(--line);
+}
+
+.bet-chevron {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+}
+
+.bet-tray {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 260px;
+  display: grid;
+  gap: 10px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  z-index: 10;
+}
+
+.bet-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.bet-preset {
+  display: grid;
+  gap: 1px;
+  padding: 6px 2px;
+  font-size: 0.7rem;
+  background: var(--surface);
+  border: 1px solid transparent;
+}
+
+.bet-preset.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.bet-preset-value {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.bet-amount {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.bet-amount input {
+  width: 100%;
+}
+
+/* White-on-accent at 16px bold again, so it takes the same AA-passing shade as Check/Call. */
+.bet-button.confirm {
+  background: #b83f22;
+  color: #fff;
+  border-color: transparent;
+  width: 100%;
+}
+
+/* Results ladder */
+
+.outcome-card {
+  width: min(440px, 94vw);
+  text-align: left;
+}
+
+.standings {
+  list-style: none;
+  margin: 14px 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.standings li {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+
+.standings li.you {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.standing-rank {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.standing-stack {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A single vertical ladder, identical on mobile — never a wide bracket tree. */
+.ladder {
+  list-style: none;
+  margin: 14px 0;
+  padding: 0 0 0 6px;
+  display: grid;
+  gap: 0;
+}
+
+.ladder-step {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+}
+
+.ladder-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--line);
+  justify-self: center;
+  box-shadow: 0 14px 0 -4px var(--line);
+}
+
+.ladder-step:last-child .ladder-dot {
+  box-shadow: none;
+}
+
+.ladder-step.done .ladder-dot {
+  background: #4d8b8f;
+}
+
+.ladder-step.current {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ladder-step.current .ladder-dot {
+  background: var(--accent);
+  transform: scale(1.25);
+}
+
+@media (max-width: 680px) {
+  .poker-layout {
+    padding: 12px 12px 16px;
+  }
+
+  .poker-felt {
+    border-radius: 28px;
+    padding: 16px 10px;
+  }
+
+  .seat {
+    min-width: 140px;
+  }
+
+  .pcard.lg {
+    width: 58px;
+    height: 82px;
+    font-size: 1.25rem;
+  }
+
+  .bet-button {
+    min-width: 92px;
+    padding: 11px 12px;
+  }
+
+  .tourney-slot {
+    align-items: stretch;
+  }
+
+  .join-strip {
+    max-width: none;
+  }
+}
