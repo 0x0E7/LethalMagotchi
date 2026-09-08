@@ -26,7 +26,8 @@ import type {
 } from '@lethalmagotchi/shared';
 import { api } from '../api/client.js';
 import { useSession } from '../session/SessionProvider.js';
-import { useGameSocket, type SocketStatus } from '../ws/useGameSocket.js';
+import { useSocket } from '../ws/SocketProvider.js';
+import type { SocketStatus } from '../ws/useGameSocket.js';
 
 export interface HandView {
   handId: string;
@@ -366,6 +367,8 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
   const characterIdRef = useRef(characterId);
   characterIdRef.current = characterId;
 
+  const socket = useSocket();
+
   const onMessage = useCallback(
     (message: ServerMessage) => {
       if (message.type === 'character:update' || message.type === 'character:rebirth') {
@@ -376,7 +379,7 @@ export function TournamentProvider({ children }: { children: ReactNode }) {
     [setCharacter],
   );
 
-  const socket = useGameSocket({ enabled: sessionStatus === 'authenticated', onMessage });
+  useEffect(() => socket.subscribe(onMessage), [socket, onMessage]);
 
   const refresh = useCallback(async () => {
     if (sessionStatus !== 'authenticated') return;

@@ -13,6 +13,7 @@ import {
   type StatId,
 } from '@lethalmagotchi/shared';
 import { ApiRequestError, NetworkError } from '../../api/client.js';
+import { ChatPanel } from '../../chat/ChatPanel.js';
 import { useReference } from '../../hooks/useReference.js';
 import { useSession } from '../../session/SessionProvider.js';
 import { useTournament } from '../../tournament/TournamentProvider.js';
@@ -211,6 +212,8 @@ export function PetScreen({ character }: { character: CharacterDto }) {
         onFire={machine.fire}
         onNote={setNote}
       />
+
+      <ChatPanel />
 
       {rebirth && <RebirthCard character={character} />}
       {!rebirth && outcome && <OutcomeCard outcome={outcome} youId={character.id} />}

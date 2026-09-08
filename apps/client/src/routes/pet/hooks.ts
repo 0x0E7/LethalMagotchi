@@ -64,6 +64,19 @@ export function distinctAnnouncement(text: string, state: DistinctAnnouncementSt
   return state.repeated ? `${text}${ZERO_WIDTH_SPACE}` : text;
 }
 
+/**
+ * Whether what the region currently holds is the announcement for `expected`, so a caller can
+ * refuse to render one that belongs to something else. The throttle means `message` lags the
+ * state that asked for it, and a caller that only checks "is there something to announce?"
+ * will show the previous subject's words under the current subject's truth. The trailing
+ * zero-width space `distinctAnnouncement` may add is part of the same announcement, so it
+ * matches too.
+ */
+export function announcementMatches(message: string, expected: string | null): boolean {
+  if (expected === null) return false;
+  return message === expected || message === `${expected}${ZERO_WIDTH_SPACE}`;
+}
+
 export interface Announcer {
   message: string;
   announce: (text: string) => void;

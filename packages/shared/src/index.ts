@@ -4,6 +4,7 @@ export * from './stats.js';
 export * from './simulation.js';
 export * from './actions.js';
 export * from './cards.js';
+export * from './chat.js';
 export * from './rebirth.js';
 export * from './tournament.js';
 export * from './schedule.js';

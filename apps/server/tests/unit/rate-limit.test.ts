@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createLimiters } from '../../src/deps.js';
 import { RateLimiter } from '../../src/rate-limit.js';
 
 /** Drives the limiter's injectable clock so backoff/expiry need no real sleeping. */
@@ -271,6 +272,36 @@ describe('RateLimiter — production limits from deps.ts', () => {
     const limiter = new RateLimiter({ limit: 5, windowMs: 60 * 60_000, now: clock.now });
     for (let attempt = 0; attempt < 5; attempt += 1) expect(limiter.check('1.2.3.4').allowed).toBe(true);
     expect(limiter.check('1.2.3.4').allowed).toBe(false);
+  });
+
+  /**
+   * Built from `createLimiters` rather than from a copy of its numbers: the bug here was a
+   * missing option in the production configuration, which a test that restates the settings
+   * cannot see.
+   *
+   * `chatBurst` is keyed by account, and nothing ever resets it the way a socket close resets
+   * the connection-keyed buckets — so without a decay, one fast-typing episode is paid for
+   * forever, at a longer mute each time.
+   */
+  it('forgives a chat burst once the account has gone quiet, and only then', () => {
+    const clock = fakeClock();
+    const { chatBurst } = createLimiters(clock.now);
+    const spendTheAllowance = (): void => {
+      for (let message = 0; message < 5; message += 1) chatBurst.check('account');
+    };
+
+    spendTheAllowance();
+    expect(chatBurst.check('account').retryAfterSeconds).toBe(10);
+
+    // Straight back into it: still the same episode, so the mute doubles.
+    clock.advance(10_000);
+    spendTheAllowance();
+    expect(chatBurst.check('account').retryAfterSeconds).toBe(20);
+
+    // An hour of ordinary silence, then another honest flurry: a first offence again.
+    clock.advance(60 * 60_000);
+    spendTheAllowance();
+    expect(chatBurst.check('account').retryAfterSeconds).toBe(10);
   });
 
   it('permits 5 create/delete cycles per account per day and blocks the 6th', () => {

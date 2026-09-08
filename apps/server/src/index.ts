@@ -1,5 +1,7 @@
 import { buildApp } from './app.js';
 import { createDummyHash } from './auth/passwords.js';
+import { ChatRetentionJob } from './chat/retention.js';
+import { ChatService } from './chat/service.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db/pool.js';
 import { createLimiters } from './deps.js';
@@ -9,26 +11,34 @@ import { Hub } from './ws/hub.js';
 const config = loadConfig();
 const db = createPool(config.databaseUrl);
 const hub = new Hub();
+const limiters = createLimiters();
+const log = (message: string, meta?: Record<string, unknown>) =>
+  console.log(JSON.stringify({ message, ...meta }));
 
 const tournaments = new TournamentService({
   db,
   hub,
   config: config.tournament,
-  log: (message, meta) => console.log(JSON.stringify({ message, ...meta })),
+  log,
 });
+
+const chat = new ChatService({ db, hub, limiters, log });
+const chatRetention = new ChatRetentionJob({ db, log });
 
 const app = await buildApp({
   config,
   db,
   dummyPasswordHash: await createDummyHash(),
-  limiters: createLimiters(),
+  limiters,
   hub,
   tournaments,
+  chat,
 });
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, 'shutting down');
   await tournaments.stop();
+  await chatRetention.stop();
   hub.closeAll();
   await app.close();
   await db.end();
@@ -49,5 +59,7 @@ try {
 } catch (error) {
   app.log.error({ err: error }, 'tournament scheduler failed to start; serving without it');
 }
+
+chatRetention.start();
 
 await app.listen({ port: config.port, host: config.host });

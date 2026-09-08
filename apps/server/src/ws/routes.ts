@@ -11,6 +11,7 @@ import type { ServerDeps } from '../deps.js';
 import { ApiError } from '../errors.js';
 import { findActiveCharacterByAccount } from '../repos/characters.js';
 import { uuidv7 } from '../uuid.js';
+import type { Connection } from './hub.js';
 
 /**
  * Only *unauthenticated* sockets are capped per address, and only until they authenticate:
@@ -81,7 +82,7 @@ class ConnectionCounter {
 }
 
 export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps): Promise<void> {
-  const { db, hub, tournaments, limiters } = deps;
+  const { db, hub, tournaments, chat, limiters } = deps;
 
   await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
 
@@ -116,7 +117,12 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
       const releaseAnonymousSlot = anonymousSlots.get(request.raw.socket);
       let releaseAccountSlot: (() => void) | null = null;
       let accountId: string | null = null;
-      let characterId: string | null = null;
+      /**
+       * The socket's binding, and the only copy of it: `connection.characterId` is what the
+       * hub re-points when this account creates or deletes a character mid-connection, so
+       * nothing here may cache it past the frame it is handling.
+       */
+      let connection: Connection | null = null;
       let refusals = 0;
       let preAuthGrant = PREAUTH_GRANT_FRAMES;
 
@@ -219,11 +225,12 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
               // per-account cap is what bounds this socket from here on.
               releaseAnonymousSlot?.();
               const character = await findActiveCharacterByAccount(db, subject);
-              characterId = character?.id ?? null;
+              const bound = character?.id ?? null;
 
-              hub.add({ id: connectionId, accountId: subject, characterId, socket });
-              send({ type: 'ready', accountId: subject, characterId });
-              if (characterId) tournaments.onCharacterOnline(characterId);
+              connection = { id: connectionId, accountId: subject, characterId: bound, socket };
+              hub.add(connection);
+              send({ type: 'ready', accountId: subject, characterId: bound });
+              if (bound) tournaments.onCharacterOnline(bound);
             } catch (error) {
               // This runs detached from the message handler, so an unhandled rejection here
               // would take the whole process down with it — one bad socket must only ever
@@ -244,8 +251,45 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
 
         if (message.type === 'ping') return;
 
-        if (!characterId) {
-          send({ type: 'error', code: 'NOT_SEATED', message: 'You do not have a character.' });
+        const isChatFrame = message.type.startsWith('chat:');
+
+        const bound = connection;
+        const boundCharacterId = bound?.characterId ?? null;
+        if (!bound || !boundCharacterId) {
+          send({
+            // Chat is gated on having a character just like play is, but says so in its own
+            // words: "not seated" is about a table this frame was never asking about.
+            code: isChatFrame ? 'NO_CHARACTER' : 'NOT_SEATED',
+            type: 'error',
+            message: 'You do not have a character.',
+          });
+          return;
+        }
+
+        if (
+          message.type === 'chat:send' ||
+          message.type === 'chat:subscribe' ||
+          message.type === 'chat:unsubscribe' ||
+          message.type === 'chat:read'
+        ) {
+          let work: Promise<void>;
+          if (message.type === 'chat:send') {
+            work = chat.handleSend(bound, {
+              clientMsgId: message.clientMsgId,
+              channelId: message.channelId,
+              body: message.body,
+            });
+          } else if (message.type === 'chat:subscribe') {
+            work = chat.handleSubscribe(bound, message.channelIds);
+          } else if (message.type === 'chat:unsubscribe') {
+            chat.handleUnsubscribe(bound, message.channelIds);
+            work = Promise.resolve();
+          } else {
+            work = chat.handleRead(bound, message.channelId, message.lastReadMessageId);
+          }
+          // Detached from the message handler, so a rejection here would otherwise take the
+          // whole process down: one bad socket must only ever cost that socket.
+          void work.catch((error: unknown) => app.log.error({ err: error }, 'chat frame failed'));
           return;
         }
 
@@ -255,11 +299,11 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
             refuse();
             return;
           }
-          tournaments.resync(characterId);
+          tournaments.resync(boundCharacterId);
           return;
         }
 
-        const seated = tournaments.act(characterId, {
+        const seated = tournaments.act(boundCharacterId, {
           handId: message.handId,
           seq: message.seq,
           action: message.action,
@@ -271,7 +315,9 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
       socket.on('close', () => {
         clearTimeout(authDeadline);
         releaseAccountSlot?.();
+        const characterId = connection?.characterId ?? null;
         hub.remove(connectionId);
+        chat.onDisconnect(connectionId);
         // Only the per-connection buckets are dropped, and their key — a fresh uuid per
         // socket — is never reused. Escalating backoff lives on `wsSource`, which is keyed
         // by account or address and deliberately survives a reconnect.

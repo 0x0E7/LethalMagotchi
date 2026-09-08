@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import pg from 'pg';
+import { axeViolations } from './helpers.js';
 
 /**
  * The shipping poker UI, driven by five real browsers through a real tournament: the
@@ -20,18 +20,6 @@ const PASSWORD = 'correct-horse-battery-9';
 const NICKNAMES = ['Miso', 'Pepper', 'Juniper', 'Waffles', 'Clover'];
 const DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://lethal:lethal@localhost:5432/lethalmagotchi_test';
-
-/**
- * `--accent` (#e2603f) fails contrast on the pet screen too — it is a design-token issue
- * across the whole product, not something the poker feature introduced, and repainting a
- * brand colour is a visual-design decision rather than a bug fix. Everything else,
- * including the poker-only seat badges and `.primary-move` (the Check/Call button, which
- * carries its own AA-passing shade), must come back clean.
- *
- * Matched as whole class tokens: a plain `includes('.primary')` would also swallow
- * `.primary-move`, which is exactly the suppression this spec must no longer have.
- */
-const SHARED_ACCENT_TOKEN_CLASSES = /\.(primary|link)(?![\w-])/;
 
 interface Player {
   username: string;
@@ -231,25 +219,6 @@ async function pageToAct(pages: Page[]): Promise<Page> {
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error('no player was offered a turn');
-}
-
-async function axeViolations(page: Page): Promise<string[]> {
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'])
-    .analyze();
-
-  return results.violations
-    .map((violation) => ({
-      ...violation,
-      nodes:
-        violation.id === 'color-contrast'
-          ? violation.nodes.filter(
-              (node) => !node.target.some((target) => SHARED_ACCENT_TOKEN_CLASSES.test(String(target))),
-            )
-          : violation.nodes,
-    }))
-    .filter((violation) => violation.nodes.length > 0)
-    .map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target).join(' ')}`);
 }
 
 async function assertAccessible(page: Page): Promise<void> {
