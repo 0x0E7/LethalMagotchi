@@ -4,8 +4,11 @@ import {
   TOWN_SQUARE_CHANNEL_ID,
   TOWN_SQUARE_NAME,
   authorBadge,
+  isChickenBadgeActive,
   type ChatChannelDto,
+  type DuelCardDto,
 } from '@lethalmagotchi/shared';
+import { useDuel } from '../duel/DuelProvider.js';
 import { announcementMatches, useAnnouncer } from '../routes/pet/hooks.js';
 import { useSession } from '../session/SessionProvider.js';
 import { useChat } from './ChatProvider.js';
@@ -37,8 +40,30 @@ function AuthorTag({ accountId }: { accountId: string }) {
   );
 }
 
+/**
+ * A player's duel standing, shown where their name is. There is no player card in the
+ * product yet, so the Town Square is where this lives — the same scoping-down chat itself
+ * did when it needed a place to put "message this player".
+ */
+function DuelStanding({ card, now }: { card: DuelCardDto; now: number }) {
+  const chicken = isChickenBadgeActive(card.chickenBadgeUntil, now);
+  return (
+    <>
+      <span className="chat-duel-record" aria-label={`${card.duelWins} duel wins, ${card.duelLosses} losses`}>
+        {card.duelWins}W · {card.duelLosses}L
+      </span>
+      {chicken && (
+        <span className="duel-chicken" title="Turned down a duel in the last day">
+          chicken
+        </span>
+      )}
+    </>
+  );
+}
+
 export function ChatPanel() {
   const chat = useChat();
+  const duel = useDuel();
   const { account } = useSession();
   const myAccountId = account?.id ?? null;
   const { message: announcement, announce } = useAnnouncer();
@@ -56,6 +81,16 @@ export function ChatPanel() {
   const thread: Thread | null = chat?.activeThread ?? null;
   const messageCount = thread?.messages.length ?? 0;
   const activeChannelId = chat?.activeChannelId ?? TOWN_SQUARE_CHANNEL_ID;
+
+  const ensureCards = duel?.ensureCards;
+  const townAuthors =
+    thread?.channel.kind === 'global'
+      ? [...new Set(thread.messages.map((message) => message.authorCharacterId).filter((id): id is string => id !== null))].join(',')
+      : '';
+  useEffect(() => {
+    if (!ensureCards || townAuthors === '') return;
+    ensureCards(townAuthors.split(','));
+  }, [ensureCards, townAuthors]);
 
   // Opening a DM is something the provider can do on its own — from "message this player",
   // or from a conversation that did not exist when the panel rendered — so the tab follows
@@ -86,6 +121,12 @@ export function ChatPanel() {
    */
   const canDm = (authorAccountId: string | null): boolean =>
     authorAccountId !== null && authorAccountId !== myAccountId && thread?.channel.kind === 'global';
+
+  /** Same guard as "message this player", plus the server's own read of duel eligibility. */
+  const duelCardFor = (message: { authorAccountId: string | null; authorCharacterId: string | null }): DuelCardDto | null => {
+    if (!duel || !canDm(message.authorAccountId) || !message.authorCharacterId) return null;
+    return duel.cards[message.authorCharacterId] ?? null;
+  };
 
   const onScroll = () => {
     const log = logRef.current;
@@ -272,6 +313,25 @@ export function ChatPanel() {
                           <span className="chat-author">{message.authorName}</span>
                         )}
                         {message.authorAccountId && <AuthorTag accountId={message.authorAccountId} />}
+                        {(() => {
+                          const card = duelCardFor(message);
+                          if (!card) return null;
+                          return (
+                            <>
+                              <DuelStanding card={card} now={Date.now()} />
+                              {card.duelEligible && (
+                                <button
+                                  type="button"
+                                  className="chat-duel"
+                                  aria-label={`Duel ${message.authorName}`}
+                                  onClick={() => duel?.openStakes(card)}
+                                >
+                                  Duel
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
                         <time dateTime={message.createdAt}>{timeOf(message.createdAt)}</time>
                       </span>
                       <span className="chat-body">{message.body}</span>

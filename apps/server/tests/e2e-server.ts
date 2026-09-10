@@ -22,6 +22,7 @@ import type { Config } from '../src/config.js';
 import { DEFAULT_TOURNAMENT_CONFIG } from '../src/config.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createPool } from '../src/db/pool.js';
+import { DuelService } from '../src/duel/service.js';
 import { seedReferenceData } from '../src/db/seed.js';
 import type { Limiters } from '../src/deps.js';
 import { RateLimiter } from '../src/rate-limit.js';
@@ -90,6 +91,25 @@ function e2eLimiters(): Limiters {
       strikeDecayMs: 10 * 60_000,
     }),
     chatDmCreate: new RateLimiter({ limit: 3, windowMs: 60 * 60_000 }),
+    // Production settings: keyed per account, and each spec uses fresh accounts.
+    duelInvite: new RateLimiter({
+      limit: 6,
+      windowMs: 10 * 60_000,
+      maxBackoffMs: 60 * 60_000,
+      strikeDecayMs: 30 * 60_000,
+    }),
+    duelAction: new RateLimiter({
+      limit: 30,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    duelResync: new RateLimiter({
+      limit: 10,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
   };
 }
 
@@ -103,6 +123,17 @@ const hub = new Hub();
 const tournaments = new TournamentService({ db, hub, config: config.tournament });
 const limiters = e2eLimiters();
 const chat = new ChatService({ db, hub, limiters });
+/**
+ * The real protocol and the real 5s window; only the between-rounds beat is shortened, so a
+ * three-round match fits comfortably inside a Playwright test's budget.
+ */
+const duels = new DuelService({
+  db,
+  hub,
+  chat,
+  limiters,
+  revealMs: Number(process.env.E2E_DUEL_REVEAL_MS ?? 300),
+});
 
 const app = await buildApp({
   config,
@@ -112,10 +143,12 @@ const app = await buildApp({
   hub,
   tournaments,
   chat,
+  duels,
 });
 
 const shutdown = async () => {
   await tournaments.stop();
+  await duels.stop();
   hub.closeAll();
   await app.close();
   await db.end();
@@ -133,6 +166,8 @@ try {
 } catch (error) {
   app.log.error({ err: error }, 'tournament scheduler failed to start; serving without it');
 }
+
+await duels.start();
 
 await app.listen({ port: config.port, host: config.host });
 // eslint-disable-next-line no-console

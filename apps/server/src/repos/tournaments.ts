@@ -342,6 +342,21 @@ export async function listTables(db: Db, tournamentId: string, round: number): P
   return result.rows;
 }
 
+/**
+ * Whether any hand was ever dealt in this tournament. `hands_played` does not count hands
+ * dealt despite its name — `completeTable` writes the winning-most player's hands *won* —
+ * and it is written nowhere else, so it is non-zero exactly when that table played at least
+ * one hand. The sum is therefore only meaningful as a zero/non-zero test, which is all this
+ * is used for: zero across every table means the bracket collapsed without a card turning.
+ */
+export async function tournamentHandsPlayed(db: Db | DbClient, tournamentId: string): Promise<number> {
+  const result = await db.query<{ hands: number }>(
+    'SELECT COALESCE(SUM(hands_played), 0)::int AS hands FROM tournament_tables WHERE tournament_id = $1',
+    [tournamentId],
+  );
+  return result.rows[0]?.hands ?? 0;
+}
+
 export async function listSeats(db: Db, tableId: string): Promise<TableSeatRow[]> {
   const result = await db.query<TableSeatRow>(
     'SELECT * FROM table_seats WHERE table_id = $1 ORDER BY seat_index',
@@ -483,6 +498,7 @@ export async function listEligibleCharacterIds(
   const result = await db.query<{ id: string; tournament_opt_in: boolean }>(
     `SELECT id, tournament_opt_in FROM characters
      WHERE deleted_at IS NULL AND account_id IS NOT NULL AND seated_table_id IS NULL
+       AND active_duel_id IS NULL
      ORDER BY id`,
   );
   return result.rows;

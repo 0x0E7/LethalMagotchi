@@ -1,5 +1,5 @@
 import { rebirthState, type CharacterStats, type RebirthCause } from '@lethalmagotchi/shared';
-import type { DbClient } from '../db/pool.js';
+import type { Db, DbClient } from '../db/pool.js';
 import { uuidv7 } from '../uuid.js';
 import type { CharacterRow } from './characters.js';
 
@@ -19,7 +19,13 @@ export interface RebirthOutcome {
 export async function rebirthCharacter(
   client: DbClient,
   row: CharacterRow,
-  input: { statsBefore: CharacterStats; cause: RebirthCause; tournamentId: string | null; at: Date },
+  input: {
+    statsBefore: CharacterStats;
+    cause: RebirthCause;
+    tournamentId: string | null;
+    duelId?: string | null;
+    at: Date;
+  },
 ): Promise<RebirthOutcome> {
   const fresh = rebirthState();
   const rebirthIndex = row.rebirth_count + 1;
@@ -33,6 +39,7 @@ export async function rebirthCharacter(
          rebirth_count = $5,
          last_rebirth_at = $4,
          seated_table_id = NULL,
+         active_duel_id = NULL,
          updated_at = now()
      WHERE id = $1
      RETURNING *`,
@@ -40,8 +47,8 @@ export async function rebirthCharacter(
   );
 
   await client.query(
-    `INSERT INTO rebirth_events (id, character_id, occurred_at, rebirth_index, cause, tournament_id, stats_before, coins_before)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO rebirth_events (id, character_id, occurred_at, rebirth_index, cause, tournament_id, duel_id, stats_before, coins_before)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       uuidv7(),
       row.id,
@@ -49,6 +56,7 @@ export async function rebirthCharacter(
       rebirthIndex,
       input.cause,
       input.tournamentId,
+      input.duelId ?? null,
       JSON.stringify(input.statsBefore),
       row.lethal_coins,
     ],
@@ -59,6 +67,32 @@ export async function rebirthCharacter(
     statsBefore: input.statsBefore,
     coinsBefore: row.lethal_coins,
     rebirthIndex,
+  };
+}
+
+/**
+ * The rebirth a duel committed, for a settlement whose own COMMIT acknowledgment was lost:
+ * the frames the loser must still be sent quote the pre-death snapshot, which only this row
+ * still holds once the character has been reset.
+ */
+export async function findDuelRebirthEvent(
+  db: Db | DbClient,
+  duelId: string,
+  characterId: string,
+): Promise<{ statsBefore: CharacterStats; coinsBefore: number; rebirthIndex: number } | null> {
+  const result = await db.query<{ stats_before: CharacterStats; coins_before: number; rebirth_index: number }>(
+    `SELECT stats_before, coins_before, rebirth_index FROM rebirth_events
+     WHERE duel_id = $1 AND character_id = $2
+     ORDER BY rebirth_index DESC
+     LIMIT 1`,
+    [duelId, characterId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    statsBefore: row.stats_before,
+    coinsBefore: row.coins_before,
+    rebirthIndex: row.rebirth_index,
   };
 }
 

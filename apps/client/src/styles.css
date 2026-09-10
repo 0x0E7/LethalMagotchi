@@ -2093,3 +2093,392 @@ button.chat-author {
     height: min(70vh, calc(100vh - 120px));
   }
 }
+
+/* ------------------------------- duels -------------------------------- */
+
+.duel-takeover {
+  z-index: 40;
+}
+
+.duel-stakes {
+  width: min(560px, 96vw);
+  text-align: left;
+  border-top: 5px solid var(--danger);
+}
+
+.duel-faceoff {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin: 0 0 14px;
+}
+
+.duel-faceoff-versus {
+  color: var(--ink-muted);
+}
+
+.duel-record {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.duel-chicken {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Deliberately not `.link`: this one sits on a light panel and carries its own weight
+   rather than the accent colour, which does not clear AA contrast. */
+.chat-duel {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-duel-record {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.duel-stakes-rows {
+  margin: 0 0 16px;
+}
+
+.duel-stakes-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.duel-stakes-row dt,
+.duel-stakes-row dd {
+  margin: 0;
+}
+
+.duel-stakes-row dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.duel-stakes-row.lethal dd {
+  color: var(--danger);
+}
+
+.duel-countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  margin: 12px 0 0;
+}
+
+.duel-stakes-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.duel-hold {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+/* The fill is the whole feedback for the hold: it grows, and at full width it fires. */
+.duel-hold::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--hold-progress, 0%);
+  background: var(--accent-soft);
+  transition: width 40ms linear;
+}
+
+.duel-hold > * {
+  position: relative;
+}
+
+.duel-hold-hint {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.duel-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-areas:
+    'top top'
+    'arena side'
+    'reveal side'
+    'status side'
+    'dock side';
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-content: start;
+  gap: 18px;
+  padding: 20px clamp(16px, 4vw, 40px) 32px;
+}
+
+.duel-topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.duel-topbar h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.duel-arena {
+  grid-area: arena;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface-raised);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.duel-fighter {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 110px;
+}
+
+.duel-avatar {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.duel-fighter-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.duel-score {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.duel-score-versus {
+  color: var(--ink-muted);
+}
+
+.duel-pips {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.duel-pip {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: transparent;
+}
+
+.duel-pip.on {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.duel-reveal {
+  grid-area: reveal;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 16px;
+}
+
+.duel-hand {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.duel-hand-label {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.duel-hand-face {
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.duel-timer {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+}
+
+.duel-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--ink) var(--ring, 0%), var(--line) 0);
+  mask: radial-gradient(circle, transparent 60%, #000 61%);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
+}
+
+.duel-digits {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.duel-status {
+  grid-area: status;
+  margin: 0;
+  text-align: center;
+  min-height: 1.5em;
+}
+
+.duel-dock {
+  grid-area: dock;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.duel-throws {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.duel-throw {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 120px;
+  padding: 16px 20px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  font-weight: 700;
+}
+
+.duel-throw-glyph {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.duel-throw.chosen {
+  border-color: var(--ink);
+  background: var(--accent-soft);
+}
+
+/* The poker dock's shortcut line lives on a dark felt; this one is on the light surface. */
+.duel-shortcuts {
+  margin: 2px 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.duel-shortcuts kbd {
+  font-family: var(--font-body);
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+
+.duel-side {
+  grid-area: side;
+  background: var(--surface-raised);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.duel-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.duel-log-row {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.duel-log-round {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.duel-log-winner {
+  font-weight: 700;
+}
+
+.duel-end {
+  width: min(460px, 94vw);
+  text-align: center;
+}
+
+.duel-end.lost {
+  border-top: 5px solid var(--danger);
+}
+
+.duel-decider {
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+.duel-end-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 820px) {
+  .duel-layout {
+    grid-template-areas:
+      'top'
+      'arena'
+      'reveal'
+      'status'
+      'dock'
+      'side';
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

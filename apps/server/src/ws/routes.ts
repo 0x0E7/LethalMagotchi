@@ -82,7 +82,7 @@ class ConnectionCounter {
 }
 
 export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps): Promise<void> {
-  const { db, hub, tournaments, chat, limiters } = deps;
+  const { db, hub, tournaments, chat, duels, limiters } = deps;
 
   await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
 
@@ -230,7 +230,10 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
               connection = { id: connectionId, accountId: subject, characterId: bound, socket };
               hub.add(connection);
               send({ type: 'ready', accountId: subject, characterId: bound });
-              if (bound) tournaments.onCharacterOnline(bound);
+              if (bound) {
+                tournaments.onCharacterOnline(bound);
+                duels.onCharacterOnline(bound);
+              }
             } catch (error) {
               // This runs detached from the message handler, so an unhandled rejection here
               // would take the whole process down with it — one bad socket must only ever
@@ -252,14 +255,15 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
         if (message.type === 'ping') return;
 
         const isChatFrame = message.type.startsWith('chat:');
+        const isDuelFrame = message.type.startsWith('duel:');
 
         const bound = connection;
         const boundCharacterId = bound?.characterId ?? null;
         if (!bound || !boundCharacterId) {
           send({
-            // Chat is gated on having a character just like play is, but says so in its own
-            // words: "not seated" is about a table this frame was never asking about.
-            code: isChatFrame ? 'NO_CHARACTER' : 'NOT_SEATED',
+            // Chat and duels are gated on having a character just like play is, but say so
+            // in their own words: "not seated" is about a table those frames never asked about.
+            code: isChatFrame || isDuelFrame ? 'NO_CHARACTER' : 'NOT_SEATED',
             type: 'error',
             message: 'You do not have a character.',
           });
@@ -293,6 +297,21 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
           return;
         }
 
+        if (
+          message.type === 'duel:invite' ||
+          message.type === 'duel:respond' ||
+          message.type === 'duel:cancel' ||
+          message.type === 'duel:throw' ||
+          message.type === 'duel:resync'
+        ) {
+          // Detached from the message handler, so a rejection here would otherwise take the
+          // whole process down: one bad socket must only ever cost that socket.
+          void duels
+            .handle(bound, message)
+            .catch((error: unknown) => app.log.error({ err: error }, 'duel frame failed'));
+          return;
+        }
+
         if (message.type === 'tourney:resync') {
           const resyncFlood = limiters.wsResync.check(connectionId);
           if (!resyncFlood.allowed) {
@@ -323,7 +342,10 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
         // by account or address and deliberately survives a reconnect.
         limiters.wsMessages.reset(connectionId);
         limiters.wsResync.reset(connectionId);
-        if (characterId) tournaments.onCharacterOffline(characterId);
+        if (characterId) {
+          tournaments.onCharacterOffline(characterId);
+          duels.onCharacterOffline(characterId);
+        }
       });
     },
   );

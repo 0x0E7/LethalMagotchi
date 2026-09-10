@@ -1,6 +1,17 @@
 import { z } from 'zod';
 import type { Card } from './cards.js';
 import { MESSAGE_RAW_MAX, type ChatChannelDto, type ChatMessageDto, type ChatRejectCode } from './chat.js';
+import {
+  DUEL_THROWS,
+  type DuelCardDto,
+  type DuelErrorCode,
+  type DuelInviteState,
+  type DuelOutcome,
+  type DuelPlayerView,
+  type DuelSide,
+  type DuelThrow,
+} from './duel.js';
+import type { RebirthCause } from './rebirth.js';
 import type { CharacterStats } from './stats.js';
 import type { CharacterDto } from './types.js';
 import type {
@@ -83,6 +94,26 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
       lastReadMessageId: z.string().uuid(),
     })
     .strict(),
+  z.object({ type: z.literal('duel:invite'), targetCharacterId: z.string().uuid() }).strict(),
+  z
+    .object({ type: z.literal('duel:respond'), inviteId: z.string().uuid(), accept: z.boolean() })
+    .strict(),
+  z.object({ type: z.literal('duel:cancel'), inviteId: z.string().uuid() }).strict(),
+  z
+    .object({
+      type: z.literal('duel:throw'),
+      duelId: z.string().uuid(),
+      round: z.number().int().min(1).max(100),
+      replay: z.number().int().min(0).max(100),
+      seq: z.number().int().min(0).max(10_000),
+      throw: z.enum(DUEL_THROWS),
+    })
+    .strict(),
+  /**
+   * `duelId` is optional because a client that reloaded mid-match has no id to name: the
+   * server answers with whatever duel the socket's character is actually in.
+   */
+  z.object({ type: z.literal('duel:resync'), duelId: z.string().uuid().optional() }).strict(),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -108,6 +139,8 @@ export type ServerMessage =
       statsBefore: CharacterStats;
       coinsBefore: number;
       rebirthIndex: number;
+      /** What killed them — the rebirth card names the cause before it names the reset. */
+      cause: RebirthCause;
     }
   | { type: 'tourney:announce'; tournament: TournamentSummary }
   | { type: 'tourney:entered'; tournamentId: string; hpConverted: number; stack: number }
@@ -193,6 +226,63 @@ export type ServerMessage =
   | { type: 'chat:ack'; clientMsgId: string; messageId: string }
   | { type: 'chat:rejected'; clientMsgId: string; code: ChatRejectCode; retryAfterMs?: number }
   | { type: 'chat:channel'; channel: ChatChannelDto }
-  | { type: 'chat:unread'; channelId: string; unreadCount: number };
+  | { type: 'chat:unread'; channelId: string; unreadCount: number }
+  /** Unicast to the challenged character. */
+  | {
+      type: 'duel:invited';
+      inviteId: string;
+      from: DuelPlayerView;
+      expiresAt: string;
+      stakeCoins: number;
+    }
+  | {
+      type: 'duel:invite_state';
+      inviteId: string;
+      state: DuelInviteState;
+      /**
+       * Only on a reconnect, and only to the challenger: a client that reloaded has no local
+       * record of the challenge it still has out, so the state alone would leave it unable to
+       * withdraw or reissue until the invite's own TTL lapsed.
+       */
+      target?: DuelCardDto;
+      expiresAt?: string;
+      stakeCoins?: number;
+    }
+  | {
+      type: 'duel:start';
+      duelId: string;
+      opponent: DuelPlayerView;
+      stakeCoins: number;
+      winsNeeded: number;
+      /** Which half of `challengerWins`/`opponentWins` is yours. */
+      youAre: DuelSide;
+    }
+  | { type: 'duel:round'; duelId: string; round: number; replay: number; seq: number; deadlineAt: string }
+  /** The fact of the lock and nothing else — the throw itself stays server-side until the reveal. */
+  | { type: 'duel:opponent_locked'; duelId: string }
+  /** Composed per recipient: this is the first frame in which either throw leaves the server. */
+  | {
+      type: 'duel:round_result';
+      duelId: string;
+      round: number;
+      replay: number;
+      seq: number;
+      yourThrow: DuelThrow;
+      opponentThrow: DuelThrow;
+      winner: 'you' | 'opponent' | 'draw';
+      tiebreak: boolean;
+      challengerWins: number;
+      opponentWins: number;
+    }
+  | {
+      type: 'duel:end';
+      duelId: string;
+      outcome: DuelOutcome;
+      winnerCharacterId: string | null;
+      loserCharacterId: string | null;
+      coinsTransferred: number;
+      rebirth: { characterId: string; rebirthIndex: number } | null;
+    }
+  | { type: 'duel:error'; code: DuelErrorCode; message: string };
 
 export type ServerMessageType = ServerMessage['type'];

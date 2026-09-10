@@ -7,6 +7,7 @@ import { ChatService } from '../../src/chat/service.js';
 import type { Config } from '../../src/config.js';
 import { DEFAULT_TOURNAMENT_CONFIG, REFRESH_COOKIE_NAME } from '../../src/config.js';
 import { createPool, type Db } from '../../src/db/pool.js';
+import { DuelService } from '../../src/duel/service.js';
 import { createLimiters, type Limiters } from '../../src/deps.js';
 import { RateLimiter } from '../../src/rate-limit.js';
 import { TournamentService } from '../../src/tournament/service.js';
@@ -64,6 +65,7 @@ export interface TestApp {
   hub: Hub;
   tournaments: TournamentService;
   chat: ChatService;
+  duels: DuelService;
 }
 
 /**
@@ -87,6 +89,9 @@ export function relaxedLimiters(): Limiters {
     chatBurst: generous(),
     chatSustained: generous(),
     chatDmCreate: generous(),
+    duelInvite: generous(),
+    duelAction: generous(),
+    duelResync: generous(),
   };
 }
 
@@ -103,6 +108,7 @@ export async function createTestApp(
     hub?: Hub;
     tournaments?: TournamentService;
     chat?: ChatService;
+    duels?: DuelService;
   } = {},
 ): Promise<TestApp> {
   const config = testConfig(options.config);
@@ -112,6 +118,7 @@ export async function createTestApp(
   const tournaments =
     options.tournaments ?? new TournamentService({ db, hub, config: config.tournament });
   const chat = options.chat ?? new ChatService({ db, hub, limiters });
+  const duels = options.duels ?? new DuelService({ db, hub, chat, limiters });
   const app = await buildApp({
     config,
     db,
@@ -120,8 +127,9 @@ export async function createTestApp(
     hub,
     tournaments,
     chat,
+    duels,
   });
-  return { app, db, limiters, config, hub, tournaments, chat };
+  return { app, db, limiters, config, hub, tournaments, chat, duels };
 }
 
 /** Usernames must satisfy ^[a-z0-9_]{3,20}$; keep them unique so tests never collide. */

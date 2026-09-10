@@ -3,6 +3,7 @@ import {
   CHAMPION_COSMETIC_ID,
   HOUSE_PRIZE_PER_ENTRANT,
   MIN_ENTRANTS,
+  chargeCoinsFor,
   nextSlotAfter,
   planRound,
   resolveEntryCharge,
@@ -14,6 +15,7 @@ import {
   type ServerMessage,
 } from '@lethalmagotchi/shared';
 import type { TournamentConfig } from '../config.js';
+import { SCHEDULER_LOCK_KEY } from '../db/advisory-locks.js';
 import { withTransaction, type Db, type DbClient } from '../db/pool.js';
 import { grantCosmetic } from '../repos/accounts.js';
 import {
@@ -26,6 +28,7 @@ import {
   toCharacterDto,
   type CharacterRow,
 } from '../repos/characters.js';
+import { reservedInviteStake } from '../repos/duels.js';
 import { rebirthCharacter } from '../repos/rebirth.js';
 import {
   claimCharge,
@@ -46,6 +49,7 @@ import {
   listTables,
   setSeatConnected,
   toTournamentSummary,
+  tournamentHandsPlayed,
   updateEntry,
   updateTable,
   updateTournamentState,
@@ -54,9 +58,6 @@ import {
 import type { Hub } from '../ws/hub.js';
 import { systemClock, type Clock, type Timer } from './clock.js';
 import { TableRunner, type RunnerSeat, type TableCompletion } from './table-runner.js';
-
-/** One well-known key so every instance contends for the same scheduler lock. */
-const SCHEDULER_LOCK_KEY = 0x4c4d_5431;
 
 /** Kept below the pool's 10 connections so registration close never starves live play. */
 const CHARGE_CONCURRENCY = 6;
@@ -443,15 +444,40 @@ export class TournamentService {
     const outcome = await withTransaction(this.db, async (client) => {
       const row = await lockCharacterById(client, characterId);
       if (!row) return null;
+      /**
+       * A character in a live duel has their wallet snapshotted and their life on the line
+       * there. Charging entry here could rebirth them mid-duel, so they are skipped
+       * entirely — the duel-side half of the same symmetric lock `seated_table_id` gets.
+       */
+      if (row.active_duel_id) return null;
 
-      const charge = optedIn ? 'entry' : 'miss_penalty';
+      const at = new Date(this.clock.now());
+      /**
+       * A pending challenge is not a duel lock, but it holds the challenger to the stake
+       * their target was shown, exactly as the action routes do. Charging entry out of that
+       * reservation would make the duel play for less than the target consented to — or,
+       * with the wallet already at the stake, convert HP for coins that are spoken for. The
+       * entry is refused instead; the challenge is the commitment they made first.
+       *
+       * What is not refused is the miss penalty that refusal earns them. It is the tax for
+       * *not* taking part, holding an outbound challenge is not taking part, and opting in
+       * to a tournament this character cannot pay to enter does not change that. Otherwise a
+       * challenge issued before each registration close — always affordable, since the stake
+       * is the smaller of the two wallets — is a standing exemption from the tax. It comes
+       * out of whatever the reservation leaves, and out of HP for the rest: the same
+       * insufficient-funds path an empty wallet takes, rebirth included.
+       */
+      const reserved = await reservedInviteStake(client, characterId, at);
+      const canAffordEntry = row.lethal_coins - reserved >= chargeCoinsFor('entry');
+      const charge = optedIn && (reserved === 0 || canAffordEntry) ? 'entry' : 'miss_penalty';
+
       // The charge ledger is the idempotency key: one row per character per tournament,
       // written in the same transaction as the coins it accounts for.
       if (!(await claimCharge(client, tournamentId, characterId, charge))) return null;
 
-      const at = new Date(this.clock.now());
       const stats = simulatedStats(row, at.getTime());
-      const resolved = resolveEntryCharge({ stats, lethalCoins: row.lethal_coins }, charge);
+      const spendableCoins = charge === 'entry' ? row.lethal_coins : Math.max(0, row.lethal_coins - reserved);
+      const resolved = resolveEntryCharge({ stats, lethalCoins: spendableCoins }, charge);
 
       if (resolved.kind === 'rebirth') {
         const reborn = await rebirthCharacter(client, row, {
@@ -460,13 +486,14 @@ export class TournamentService {
           tournamentId,
           at,
         });
-        return { kind: 'reborn' as const, charge, ...reborn };
+        return { kind: 'reborn' as const, charge, optedIn, ...reborn };
       }
 
       const nextStats: CharacterStats = { ...stats, hp: resolved.hpAfter };
       const updated = await commitCharacterState(client, row.id, {
         stats: nextStats,
-        lethalCoins: resolved.coinsAfter,
+        // `resolved` only ever saw the spendable balance, so the reserved stake is put back.
+        lethalCoins: resolved.coinsAfter + (row.lethal_coins - spendableCoins),
         actionCooldowns: row.action_cooldowns,
         simulatedAt: at,
       });
@@ -498,8 +525,11 @@ export class TournamentService {
         statsBefore: outcome.statsBefore,
         coinsBefore: outcome.coinsBefore,
         rebirthIndex: outcome.rebirthIndex,
+        cause: 'tournament_entry_hp_exhausted',
       });
-      if (outcome.charge === 'entry') {
+      // Keyed on the opt-in rather than on the charge: a character who opted in and was
+      // miss-penalized instead still has a join in flight on their client to clear.
+      if (outcome.optedIn) {
         this.hub.sendToCharacter(characterId, {
           type: 'tourney:entry_failed',
           tournamentId,
@@ -571,48 +601,84 @@ export class TournamentService {
       remaining: entrantIds.length,
     });
 
-    for (const characterId of plan.byes) {
-      this.hub.sendToCharacter(characterId, { type: 'tourney:bye', tournamentId: tournament.id, round });
-    }
+    const byes = [...plan.byes];
+    const withdrawn: string[] = [];
+    let tablesStarted = 0;
+
+    const buildSeat = (characterId: string, seatIndex: number): RunnerSeat => {
+      const badge = badges.get(characterId);
+      const entry = entries.get(characterId);
+      // Seating without an entry would put a character at a table with no escrow behind
+      // it — a shard mis-assignment, not a playable seat.
+      if (!entry) {
+        throw new Error(`character ${characterId} has no entry on tournament ${tournament.id}`);
+      }
+      return {
+        seatIndex,
+        characterId,
+        nickname: badge?.nickname ?? 'Unknown',
+        speciesId: badge?.species_id ?? 'otter',
+        stack: entry.current_stack,
+        handsWon: 0,
+        connected: this.hub.isOnline(characterId),
+      } satisfies RunnerSeat;
+    };
 
     for (const seatIds of plan.tables) {
-      const seats = seatIds.map((characterId, seatIndex) => {
-        const badge = badges.get(characterId);
-        const entry = entries.get(characterId);
-        // Seating without an entry would put a character at a table with no escrow behind
-        // it — a shard mis-assignment, not a playable seat.
-        if (!entry) {
-          throw new Error(`character ${characterId} has no entry on tournament ${tournament.id}`);
+      /**
+       * The duel half of the engagement lock, re-checked under the same row lock that
+       * writes the seat. Registration close excludes duelists, but seating happens after
+       * the whole population has been charged and sharded — a window wide enough for a
+       * duel invite to be accepted in. Without this a character could be seated here while
+       * already committed to a duel that can kill and rebirth them.
+       */
+      const claim = await withTransaction(this.db, async (client) => {
+        const kept = new Set<string>();
+        const refused: string[] = [];
+        // Locked in id order, the same order duel settlement uses, so the two can never
+        // deadlock on a shared character.
+        for (const characterId of [...seatIds].sort()) {
+          const row = await lockCharacterById(client, characterId);
+          if (!row || row.active_duel_id) refused.push(characterId);
+          else kept.add(characterId);
         }
-        return {
-          seatIndex,
-          characterId,
-          nickname: badge?.nickname ?? 'Unknown',
-          speciesId: badge?.species_id ?? 'otter',
-          stack: entry.current_stack,
-          handsWon: 0,
-          connected: this.hub.isOnline(characterId),
-        } satisfies RunnerSeat;
-      });
 
-      const tableRow = await withTransaction(this.db, async (client) => {
+        const playable = seatIds.filter((characterId) => kept.has(characterId));
+        // One player left is not a table; they take a bye into the next round instead.
+        if (playable.length < 2) return { table: null, seats: [], playable, refused };
+
+        const seats = playable.map(buildSeat);
         const created = await insertTable(client, {
           tournamentId: tournament.id,
           round,
           seats: seats.map((seat) => ({ characterId: seat.characterId, stack: seat.stack })),
         });
         for (const seat of seats) await setSeatedTable(client, seat.characterId, created.id);
-        return created;
+        return { table: created, seats, playable, refused };
       });
 
-      await updateTable(this.db, tableRow.id, { state: 'playing' });
+      withdrawn.push(...claim.refused);
+      if (claim.refused.length > 0) {
+        this.log('seating refused: character claimed by a duel', {
+          tournamentId: tournament.id,
+          round,
+          characterIds: claim.refused,
+        });
+      }
+
+      if (!claim.table) {
+        byes.push(...claim.playable);
+        continue;
+      }
+
+      await updateTable(this.db, claim.table.id, { state: 'playing' });
 
       const runner = new TableRunner({
-        tableId: tableRow.id,
+        tableId: claim.table.id,
         tournamentId: tournament.id,
         round,
         totalRounds,
-        seats,
+        seats: claim.seats,
         db: this.db,
         hub: this.hub,
         clock: this.clock,
@@ -625,15 +691,58 @@ export class TournamentService {
         },
       });
 
-      this.tables.set(tableRow.id, runner);
-      for (const seat of seats) this.tablesByCharacter.set(seat.characterId, runner);
+      this.tables.set(claim.table.id, runner);
+      for (const seat of claim.seats) this.tablesByCharacter.set(seat.characterId, runner);
       runner.start();
+      tablesStarted += 1;
     }
 
-    if (plan.tables.length === 0) {
-      // Everyone got a bye (a one-entrant round), so the round is already over.
+    for (const characterId of withdrawn) await this.withdrawEntrant(tournament.id, characterId, round);
+
+    for (const characterId of byes) {
+      this.hub.sendToCharacter(characterId, { type: 'tourney:bye', tournamentId: tournament.id, round });
+    }
+
+    if (tablesStarted === 0) {
+      // Everyone got a bye (a one-entrant round, or a round nobody could be seated for), so
+      // the round is already over.
       await this.advanceRoundLocked(tournament.id, round);
     }
+  }
+
+  /**
+   * A character who became ineligible between the entry charge and the seat leaves the
+   * tournament the same way a table exit does: escrow back to the wallet, entry closed out
+   * for this round. Their coins and their life are committed to the other subsystem.
+   */
+  private async withdrawEntrant(tournamentId: string, characterId: string, round: number): Promise<void> {
+    const outcome = await withTransaction(this.db, async (client) => {
+      const result = await client.query<{ current_stack: number }>(
+        `SELECT current_stack FROM tournament_entries
+         WHERE tournament_id = $1 AND character_id = $2 AND eliminated_in_round IS NULL
+         FOR UPDATE`,
+        [tournamentId, characterId],
+      );
+      const stack = result.rows[0]?.current_stack;
+      if (stack === undefined) return null;
+      await updateEntry(client, tournamentId, characterId, {
+        eliminatedInRound: round,
+        currentStack: 0,
+      });
+      return { character: await creditCoins(client, characterId, stack), coinsReturned: stack };
+    });
+    if (!outcome) return;
+
+    this.hub.sendToCharacter(characterId, {
+      type: 'tourney:eliminated',
+      tournamentId,
+      round,
+      coinsReturned: outcome.coinsReturned,
+    });
+    this.hub.sendToCharacter(characterId, {
+      type: 'character:update',
+      character: toCharacterDto(outcome.character, this.clock.now()),
+    });
   }
 
   private async onTableComplete(completion: TableCompletion): Promise<void> {
@@ -663,6 +772,9 @@ export class TournamentService {
     await updateTable(this.db, completion.tableId, {
       state: 'complete',
       qualifierCharacterId: completion.qualifierCharacterId,
+      // Despite the column name this is the best single player's hands *won*, not a count of
+      // hands dealt. It is only ever read as "did this table play at all" — every hand has
+      // exactly one winner, so the maximum is >= 1 if and only if a hand was dealt.
       handsPlayed: completion.standings.reduce((max, standing) => Math.max(max, standing.handsWon), 0),
     });
 
@@ -733,7 +845,15 @@ export class TournamentService {
         [tournamentId, winnerCharacterId],
       );
       const stackCoins = entryResult.rows[0]?.current_stack ?? 0;
-      const prizeCoins = tournament.prize_pot_coins;
+      /**
+       * A bracket that collapsed before a single hand was dealt — every table short of two
+       * playable seats, which a group can arrange by duel-locking each other at seating —
+       * still has to end, and the survivor still gets their own escrow back. What they do
+       * not get is the house prize pot: it is paid for winning a tournament, and nothing
+       * was played. Any tournament where one hand was dealt anywhere pays as before.
+       */
+      const prizeCoins =
+        (await tournamentHandsPlayed(client, tournamentId)) > 0 ? tournament.prize_pot_coins : 0;
 
       const character = await creditCoins(client, winnerCharacterId, stackCoins + prizeCoins);
       await recordTournamentWin(client, winnerCharacterId);

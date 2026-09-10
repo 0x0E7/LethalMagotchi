@@ -15,6 +15,7 @@ import type {
   CharacterStats,
   LegalActionsView,
   PotPayout,
+  RebirthCause,
   SeatView,
   ServerMessage,
   ShowdownReveal,
@@ -80,6 +81,7 @@ export interface RebirthNotice {
   statsBefore: CharacterStats;
   coinsBefore: number;
   rebirthIndex: number;
+  cause: RebirthCause;
 }
 
 interface State {
@@ -314,6 +316,7 @@ function reduceServer(state: State, message: ServerMessage, characterId: string 
           statsBefore: message.statsBefore,
           coinsBefore: message.coinsBefore,
           rebirthIndex: message.rebirthIndex,
+          cause: message.cause,
         },
       };
 

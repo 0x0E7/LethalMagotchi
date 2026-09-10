@@ -4,6 +4,7 @@ import { ChatRetentionJob } from './chat/retention.js';
 import { ChatService } from './chat/service.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db/pool.js';
+import { DuelService } from './duel/service.js';
 import { createLimiters } from './deps.js';
 import { TournamentService } from './tournament/service.js';
 import { Hub } from './ws/hub.js';
@@ -23,6 +24,7 @@ const tournaments = new TournamentService({
 });
 
 const chat = new ChatService({ db, hub, limiters, log });
+const duels = new DuelService({ db, hub, chat, limiters, log });
 const chatRetention = new ChatRetentionJob({ db, log });
 
 const app = await buildApp({
@@ -33,11 +35,13 @@ const app = await buildApp({
   hub,
   tournaments,
   chat,
+  duels,
 });
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, 'shutting down');
   await tournaments.stop();
+  await duels.stop();
   await chatRetention.stop();
   hub.closeAll();
   await app.close();
@@ -59,6 +63,10 @@ try {
 } catch (error) {
   app.log.error({ err: error }, 'tournament scheduler failed to start; serving without it');
 }
+
+// Duels held in memory cannot survive a restart, so whatever the last process left behind
+// is abandoned before the first socket is accepted.
+await duels.start();
 
 chatRetention.start();
 
