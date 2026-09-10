@@ -2,7 +2,7 @@ import { STARTING_STATS, type CharacterStats } from './stats.js';
 
 export const STARTING_LETHAL_COINS = 5;
 
-export const REBIRTH_CAUSES = ['tournament_entry_hp_exhausted'] as const;
+export const REBIRTH_CAUSES = ['tournament_entry_hp_exhausted', 'duel_defeat'] as const;
 export type RebirthCause = (typeof REBIRTH_CAUSES)[number];
 
 export interface RebirthState {
@@ -27,6 +27,7 @@ export interface RebirthEventDto {
   rebirthIndex: number;
   cause: RebirthCause;
   tournamentId: string | null;
+  duelId: string | null;
   statsBefore: CharacterStats;
   coinsBefore: number;
 }

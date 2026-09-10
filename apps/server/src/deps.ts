@@ -1,5 +1,6 @@
 import type { ChatService } from './chat/service.js';
 import type { Config } from './config.js';
+import type { DuelService } from './duel/service.js';
 import type { Db } from './db/pool.js';
 import { RateLimiter, type RateLimiterOptions } from './rate-limit.js';
 import type { TournamentService } from './tournament/service.js';
@@ -18,6 +19,9 @@ export interface Limiters {
   chatBurst: RateLimiter;
   chatSustained: RateLimiter;
   chatDmCreate: RateLimiter;
+  duelInvite: RateLimiter;
+  duelAction: RateLimiter;
+  duelResync: RateLimiter;
 }
 
 export interface ServerDeps {
@@ -28,6 +32,7 @@ export interface ServerDeps {
   hub: Hub;
   tournaments: TournamentService;
   chat: ChatService;
+  duels: DuelService;
 }
 
 /** `now` is injectable so a test can assert the *production* numbers, not a copy of them. */
@@ -79,5 +84,32 @@ export function createLimiters(now?: () => number): Limiters {
     // Opening conversations is the mass-harassment primitive, not sending into ones that
     // already exist — so only newly created DM channels are charged here.
     chatDmCreate: limiter({ limit: 3, windowMs: 60 * 60_000 }),
+    // Issuing a lethal challenge is the harassment primitive here, and an honest player
+    // needs very few: a challenge takes a minute to answer and the match itself is over in
+    // seconds. Targeted repetition is already bounded by the 24h per-pair decline cooldown,
+    // so this bucket only has to stop untargeted spraying.
+    duelInvite: limiter({
+      limit: 6,
+      windowMs: 10 * 60_000,
+      maxBackoffMs: 60 * 60_000,
+      strikeDecayMs: 30 * 60_000,
+    }),
+    // Everything else a duel sends: throws, answers, cancels, resyncs. A best-of-3 needs a
+    // handful of frames, so this is generous for play and tight against a throw flood —
+    // and it is charged before the frame's content is even looked at.
+    duelAction: limiter({
+      limit: 30,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    // Its own tighter bucket, for the same reason `tourney:resync` has one: a resync costs
+    // several queries and a burst of frames, so it must not be affordable at play rates.
+    duelResync: limiter({
+      limit: 10,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
   };
 }

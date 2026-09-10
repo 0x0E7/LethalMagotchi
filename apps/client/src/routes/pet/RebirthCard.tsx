@@ -1,5 +1,14 @@
-import type { CharacterDto } from '@lethalmagotchi/shared';
+import type { CharacterDto, RebirthCause } from '@lethalmagotchi/shared';
 import { useTournament } from '../../tournament/TournamentProvider.js';
+
+/**
+ * What killed them. The reset copy is identical either way — a rebirth is a rebirth — but
+ * the first line has to name the real cause, or a duel death reads as a care failure.
+ */
+const CAUSE_HEADINGS: Record<RebirthCause, (nickname: string) => string> = {
+  tournament_entry_hp_exhausted: (nickname) => `${nickname} ran out of HP.`,
+  duel_defeat: (nickname) => `${nickname} lost the duel.`,
+};
 
 /**
  * Placeholder for the phoenix sequence.
@@ -21,7 +30,7 @@ export function RebirthCard({ character }: { character: CharacterDto }) {
         <p className="rebirth-mark" aria-hidden="true">
           🕊️
         </p>
-        <h2>{character.nickname} ran out of HP.</h2>
+        <h2>{CAUSE_HEADINGS[rebirth.cause](character.nickname)}</h2>
         <p>
           Their stats and coins have reset — everything else about them is exactly the same. Same
           name, same story, same {character.speciesId}.

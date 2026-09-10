@@ -21,6 +21,7 @@ import {
   toMessageDto,
   unreadCountFor,
   type ChannelRow,
+  type MessageRow,
 } from '../repos/chat.js';
 import type { Connection, Hub } from '../ws/hub.js';
 import { DuplicateGuard } from './duplicate-guard.js';
@@ -190,6 +191,20 @@ export class ChatService {
     const message: ServerMessage = { type: 'chat:message', channelId: channel.id, message: toMessageDto(row) };
     if (channel.kind === 'global') await this.fanOutGlobal(message, accountId);
     else await this.fanOutDirect(channel.id, message, accountId);
+  }
+
+  /**
+   * A system message reaches every connected player with no exclusions: it has no author
+   * account, so there is nobody to have blocked. Callers hand over a row they have already
+   * committed, never a body to write.
+   */
+  broadcastSystemMessage(channelId: string, row: MessageRow): void {
+    const payload = JSON.stringify({
+      type: 'chat:message',
+      channelId,
+      message: toMessageDto(row),
+    } satisfies ServerMessage);
+    for (const connection of this.hub.playerConnections()) connection.socket.send(payload);
   }
 
   /**

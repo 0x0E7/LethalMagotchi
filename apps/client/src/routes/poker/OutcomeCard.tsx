@@ -76,7 +76,9 @@ export function OutcomeCard({ outcome, youId }: { outcome: Outcome; youId: strin
         return {
           title: outcome.you ? 'You won the whole thing' : `${outcome.nickname} takes it`,
           lead: outcome.you
-            ? `${outcome.stackCoins} coins from the table plus a ${outcome.prizeCoins}-coin house prize, and a champion's crown.`
+            ? outcome.prizeCoins > 0
+              ? `${outcome.stackCoins} coins from the table plus a ${outcome.prizeCoins}-coin house prize, and a champion's crown.`
+              : `${outcome.stackCoins} coins from the table, and a champion's crown. No hand was ever dealt, so the house keeps its prize.`
             : `${outcome.nickname} finished as champion. Your coins are already back in your wallet.`,
           standings: null,
         };

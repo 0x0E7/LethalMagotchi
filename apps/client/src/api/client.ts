@@ -8,6 +8,7 @@ import type {
   ChatChannelResponse,
   ChatChannelsResponse,
   ChatMessagesResponse,
+  DuelCardsResponse,
   MeResponse,
   ShopItemId,
   ReferenceResponse,
@@ -209,6 +210,12 @@ export const api = {
   chatMessages(channelId: string, before?: string): Promise<ChatMessagesResponse> {
     const query = before ? `?before=${encodeURIComponent(before)}` : '';
     return request<ChatMessagesResponse>(`/chat/channels/${channelId}/messages${query}`);
+  },
+
+  duelCards(characterIds: string[]): Promise<DuelCardsResponse> {
+    return request<DuelCardsResponse>(
+      `/duels/cards?characterIds=${encodeURIComponent(characterIds.join(','))}`,
+    );
   },
 
   blockPlayer(blockedAccountId: string): Promise<void> {

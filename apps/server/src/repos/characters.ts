@@ -1,11 +1,13 @@
 import {
   STARTING_LETHAL_COINS,
   STARTING_STATS,
+  isOldEnoughToDuel,
   normalizeStats,
   roundStats,
   simulateCharacter,
   type CharacterCreate,
   type CharacterDto,
+  type DuelCardDto,
   type CharacterPatch,
   type CharacterStats,
   type OccupationId,
@@ -36,6 +38,10 @@ export interface CharacterRow {
   tournament_opt_in: boolean;
   tournament_wins: number;
   seated_table_id: string | null;
+  active_duel_id: string | null;
+  duel_wins: number;
+  duel_losses: number;
+  chicken_badge_until: Date | null;
   rebirth_count: number;
   last_rebirth_at: Date | null;
 }
@@ -78,8 +84,31 @@ export function toCharacterDto(row: CharacterRow, now: number = Date.now()): Cha
     tournamentOptIn: row.tournament_opt_in,
     tournamentWins: row.tournament_wins,
     seatedTableId: row.seated_table_id,
+    activeDuelId: row.active_duel_id,
+    duelWins: row.duel_wins,
+    duelLosses: row.duel_losses,
+    chickenBadgeUntil: row.chicken_badge_until ? row.chicken_badge_until.toISOString() : null,
     rebirthCount: row.rebirth_count,
     lastRebirthAt: row.last_rebirth_at ? row.last_rebirth_at.toISOString() : null,
+  };
+}
+
+/**
+ * The public duel standing of a character: their wallet (which is what a challenger is
+ * risking, so it cannot be hidden), their record, and their chicken badge.
+ */
+export function toDuelCardDto(row: CharacterRow, now: number = Date.now()): DuelCardDto {
+  return {
+    characterId: row.id,
+    accountId: row.account_id,
+    nickname: row.nickname,
+    speciesId: row.species_id,
+    lethalCoins: row.lethal_coins,
+    duelWins: row.duel_wins,
+    duelLosses: row.duel_losses,
+    chickenBadgeUntil: row.chicken_badge_until ? row.chicken_badge_until.toISOString() : null,
+    duelEligible:
+      isOldEnoughToDuel(row.created_at, now) && !row.seated_table_id && !row.active_duel_id,
   };
 }
 
@@ -204,7 +233,7 @@ export async function lockCharacterById(client: DbClient, characterId: string): 
   return result.rows[0] ?? null;
 }
 
-export async function findCharacterById(db: Db, characterId: string): Promise<CharacterRow | null> {
+export async function findCharacterById(db: Db | DbClient, characterId: string): Promise<CharacterRow | null> {
   const result = await db.query<CharacterRow>('SELECT * FROM characters WHERE id = $1', [characterId]);
   return result.rows[0] ?? null;
 }
@@ -234,6 +263,47 @@ export async function setSeatedTable(
   ]);
 }
 
+/**
+ * The duel half of the engagement lock. Set under the same row lock that snapshots the
+ * wallets, cleared in the settlement transaction — never anywhere else.
+ */
+export async function setActiveDuel(
+  client: DbClient,
+  characterId: string,
+  duelId: string | null,
+): Promise<void> {
+  await client.query('UPDATE characters SET active_duel_id = $2, updated_at = now() WHERE id = $1', [
+    characterId,
+    duelId,
+  ]);
+}
+
+export async function recordDuelResult(
+  client: DbClient,
+  input: { winnerCharacterId: string; loserCharacterId: string },
+): Promise<void> {
+  await client.query(
+    `UPDATE characters
+     SET duel_wins = duel_wins + (CASE WHEN id = $1 THEN 1 ELSE 0 END),
+         duel_losses = duel_losses + (CASE WHEN id = $2 THEN 1 ELSE 0 END),
+         updated_at = now()
+     WHERE id = ANY(ARRAY[$1, $2]::uuid[])`,
+    [input.winnerCharacterId, input.loserCharacterId],
+  );
+}
+
+export async function setChickenBadge(
+  client: DbClient,
+  characterId: string,
+  until: Date,
+): Promise<CharacterRow | null> {
+  const result = await client.query<CharacterRow>(
+    'UPDATE characters SET chicken_badge_until = $2, updated_at = now() WHERE id = $1 RETURNING *',
+    [characterId, until],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function creditCoins(
   client: DbClient,
   characterId: string,
@@ -254,7 +324,7 @@ export async function recordTournamentWin(client: DbClient, characterId: string)
   );
 }
 
-export async function softDeleteCharacter(db: Db, accountId: string): Promise<boolean> {
+export async function softDeleteCharacter(db: Db | DbClient, accountId: string): Promise<boolean> {
   const result = await db.query(
     'UPDATE characters SET deleted_at = now(), updated_at = now() WHERE account_id = $1 AND deleted_at IS NULL',
     [accountId],

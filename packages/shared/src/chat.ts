@@ -15,6 +15,12 @@ export const TOWN_SQUARE_NAME = 'Town Square';
  */
 export const TOWN_SQUARE_CHANNEL_ID = '00000000-0000-7000-8000-000000000001';
 
+/**
+ * The name a system message is posted under. System messages have no author account, so
+ * this is a label rather than an identity — nothing can be sent *to* it.
+ */
+export const SYSTEM_AUTHOR_NAME = 'Town Crier';
+
 export type ChannelKind = 'global' | 'dm';
 export type MessageModeration = 'clean' | 'flagged';
 

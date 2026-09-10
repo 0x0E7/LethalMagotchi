@@ -1,5 +1,8 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
+import type { CharacterDto } from '@lethalmagotchi/shared';
+import { DuelArena } from './duel/DuelArena.js';
+import { useDuel } from './duel/DuelProvider.js';
 import { useSession } from './session/SessionProvider.js';
 import { useTournament } from './tournament/TournamentProvider.js';
 import { AuthScreen } from './routes/AuthScreen.js';
@@ -16,6 +19,12 @@ function Splash() {
   );
 }
 
+function DuelRoute({ character }: { character: CharacterDto }) {
+  const duel = useDuel();
+  if (!duel?.match) return <Navigate to="/pet" replace />;
+  return <DuelArena match={duel.match} character={character} />;
+}
+
 function PokerRoute() {
   const { table } = useTournament();
   if (!table) return <Navigate to="/pet" replace />;
@@ -23,19 +32,23 @@ function PokerRoute() {
 }
 
 /**
- * Being seated is server state, not a link the player follows: the table route opens
- * itself when `tourney:seated` arrives and closes when the table resolves, so a player
- * can never be looking at the wrong screen while their turn timer runs.
+ * Being seated or in a duel is server state, not a link the player follows: each route
+ * opens itself when the server says the engagement started and closes when it resolves, so
+ * a player can never be looking at the wrong screen while a deadline runs against them.
  */
 function useSeatRouting(): void {
   const { table } = useTournament();
+  const duel = useDuel();
+  const match = duel?.match ?? null;
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     if (table && location.pathname !== '/poker') navigate('/poker', { replace: true });
     if (!table && location.pathname === '/poker') navigate('/pet', { replace: true });
-  }, [table, location.pathname, navigate]);
+    if (match && location.pathname !== '/duel') navigate('/duel', { replace: true });
+    if (!match && location.pathname === '/duel') navigate('/pet', { replace: true });
+  }, [table, match, location.pathname, navigate]);
 }
 
 export function App() {
@@ -75,6 +88,10 @@ export function App() {
       <Route
         path="/poker"
         element={character ? <PokerRoute /> : <Navigate to="/create/species" replace />}
+      />
+      <Route
+        path="/duel"
+        element={character ? <DuelRoute character={character} /> : <Navigate to="/create/species" replace />}
       />
       <Route path="*" element={<Navigate to={character ? '/pet' : '/create/species'} replace />} />
     </Routes>

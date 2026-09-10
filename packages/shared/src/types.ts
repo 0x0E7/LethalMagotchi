@@ -39,6 +39,10 @@ export interface CharacterDto {
   tournamentOptIn: boolean;
   tournamentWins: number;
   seatedTableId: string | null;
+  activeDuelId: string | null;
+  duelWins: number;
+  duelLosses: number;
+  chickenBadgeUntil: string | null;
   rebirthCount: number;
   lastRebirthAt: string | null;
 }
@@ -125,6 +129,9 @@ export const API_ERROR_CODES = [
   'INSUFFICIENT_FUNDS',
   'ACTION_ON_COOLDOWN',
   'CHARACTER_SEATED',
+  'CHARACTER_IN_DUEL',
+  /** Coins already promised to a pending duel invite cannot be spent while it is live. */
+  'DUEL_STAKE_RESERVED',
   'BLOCKED',
   'NOT_FOUND',
   'INTERNAL_ERROR',

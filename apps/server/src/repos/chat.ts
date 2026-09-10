@@ -1,4 +1,5 @@
 import {
+  SYSTEM_AUTHOR_NAME,
   TOWN_SQUARE_CHANNEL_ID,
   dmChannelKey,
   type ChannelKind,
@@ -294,6 +295,55 @@ export async function insertMessage(
      WHERE ch.id = $3 AND ch.account_id = $4 AND ch.deleted_at IS NULL
      RETURNING *`,
     [uuidv7(), input.channelId, input.characterId, input.accountId, input.body, input.moderation],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * The one path that writes a message with no author, for events the world itself reports —
+ * currently only a duel death. It deliberately does *not* take an account or a name: there
+ * is no caller-supplied identity here at all, so this cannot be turned into a way to speak
+ * as somebody else, which is exactly the property `insertMessage`'s character join defends.
+ *
+ * Takes a `DbClient` because every caller so far writes it inside the transaction that
+ * makes the event true, so the announcement and the event commit together.
+ */
+export async function insertSystemMessage(
+  client: DbClient,
+  input: { channelId: string; body: string; at?: Date },
+): Promise<MessageRow> {
+  const result = await client.query<MessageRow>(
+    `INSERT INTO chat_messages (
+       id, channel_id, author_account_id, author_character_id, author_name_snapshot, body,
+       created_at, moderation
+     )
+     VALUES ($1, $2, NULL, NULL, $3, $4, COALESCE($5::timestamptz, now()), 'clean')
+     RETURNING *`,
+    [uuidv7(), input.channelId, SYSTEM_AUTHOR_NAME, input.body, input.at ?? null],
+  );
+  return result.rows[0]!;
+}
+
+/**
+ * The counterpart read for a settlement that committed but could not report itself: the
+ * announcement row is already written, so it is looked up rather than inserted again. The
+ * insert takes its timestamp from the same instant the duel's `ended_at` does, which is what
+ * makes (channel, body, created_at) enough to find exactly the one row back.
+ *
+ * Ordered because nicknames are not unique: two duels between same-named pairs ending in the
+ * same millisecond would otherwise hand back an arbitrary one of two identical rows.
+ */
+export async function findSystemMessage(
+  db: Db,
+  input: { channelId: string; body: string; at: Date },
+): Promise<MessageRow | null> {
+  const result = await db.query<MessageRow>(
+    `SELECT * FROM chat_messages
+     WHERE channel_id = $1 AND author_account_id IS NULL AND author_character_id IS NULL
+       AND body = $2 AND created_at = $3
+     ORDER BY id
+     LIMIT 1`,
+    [input.channelId, input.body, input.at],
   );
   return result.rows[0] ?? null;
 }

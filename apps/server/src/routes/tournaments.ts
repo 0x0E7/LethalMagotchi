@@ -49,6 +49,9 @@ export async function registerTournamentRoutes(app: FastifyInstance, deps: Serve
     if (existing.seated_table_id) {
       throw new ApiError(409, 'CHARACTER_SEATED', 'You are already at a table.');
     }
+    if (existing.active_duel_id) {
+      throw new ApiError(409, 'CHARACTER_IN_DUEL', 'You are in a duel right now.');
+    }
 
     const updated = await setTournamentOptIn(db, request.accountId, optIn);
     if (!updated) throw new ApiError(404, 'NO_CHARACTER', 'You do not have a character yet.');
