@@ -38,7 +38,7 @@ function assertModerated(fields: { nickname?: string; bio?: string; originCity?:
 }
 
 export async function registerCharacterRoutes(app: FastifyInstance, deps: ServerDeps): Promise<void> {
-  const { db, limiters, hub, tournaments, duels } = deps;
+  const { db, limiters, hub, tournaments, duels, raids } = deps;
 
   app.get('/api/v1/me', { onRequest: app.authenticate }, async (request, reply) => {
     const accountId = request.accountId;
@@ -69,7 +69,7 @@ export async function registerCharacterRoutes(app: FastifyInstance, deps: Server
       // Back in the world: any DM this account left by deleting a previous character opens
       // again, so a rebuild does not silently orphan conversations the other side still has.
       await rejoinChatForAccount(db, accountId);
-      rebindAccountCharacter({ hub, tournaments, duels }, accountId, created.id);
+      rebindAccountCharacter({ hub, tournaments, duels, raids }, accountId, created.id);
       return reply.code(201).send({ character: toCharacterDto(created) });
     } catch (error) {
       if (isUniqueViolation(error, 'ux_character_account')) {
@@ -102,13 +102,17 @@ export async function registerCharacterRoutes(app: FastifyInstance, deps: Server
       if (existing.active_duel_id) {
         throw new ApiError(409, 'CHARACTER_IN_DUEL', 'You are in a duel right now.');
       }
+      // Same reason: a raid settlement needs every wallet it locked to still be there.
+      if (existing.active_raid_id) {
+        throw new ApiError(409, 'CHARACTER_IN_RAID', 'You are in a raid right now.');
+      }
       return softDeleteCharacter(client, request.accountId);
     });
     if (!deleted) throw new ApiError(404, 'NO_CHARACTER', 'You do not have a character yet.');
     // Messages are never removed with the author. The membership goes soft-left instead, and
     // any DM that is now down to one live participant becomes read-only for whoever is left.
     await leaveChatForAccount(db, request.accountId);
-    rebindAccountCharacter({ hub, tournaments, duels }, request.accountId, null);
+    rebindAccountCharacter({ hub, tournaments, duels, raids }, request.accountId, null);
     return reply.code(204).send();
   });
 }

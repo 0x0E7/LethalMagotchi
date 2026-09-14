@@ -5,6 +5,7 @@ import { ChatService } from './chat/service.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db/pool.js';
 import { DuelService } from './duel/service.js';
+import { RaidService } from './raid/service.js';
 import { createLimiters } from './deps.js';
 import { TournamentService } from './tournament/service.js';
 import { Hub } from './ws/hub.js';
@@ -25,6 +26,7 @@ const tournaments = new TournamentService({
 
 const chat = new ChatService({ db, hub, limiters, log });
 const duels = new DuelService({ db, hub, chat, limiters, log });
+const raids = new RaidService({ db, hub, limiters, log });
 const chatRetention = new ChatRetentionJob({ db, log });
 
 const app = await buildApp({
@@ -36,12 +38,14 @@ const app = await buildApp({
   tournaments,
   chat,
   duels,
+  raids,
 });
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, 'shutting down');
   await tournaments.stop();
   await duels.stop();
+  await raids.stop();
   await chatRetention.stop();
   hub.closeAll();
   await app.close();
@@ -67,6 +71,9 @@ try {
 // Duels held in memory cannot survive a restart, so whatever the last process left behind
 // is abandoned before the first socket is accepted.
 await duels.start();
+// Same reasoning for raids: an escrow held by a raid whose runner died with the process
+// goes back to the wallet it came from before the first socket is accepted.
+await raids.start();
 
 chatRetention.start();
 

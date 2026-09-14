@@ -147,6 +147,18 @@ export const actionRequestSchema = z
 
 export const tournamentOptInSchema = z.object({ optIn: z.boolean() }).strict();
 
+/**
+ * A donation is a real transfer, so the amount is bounded here as well as against the
+ * sender's balance server-side: the upper bound only has to be past any wallet a player
+ * can hold, and it stops a nonsense number reaching the transaction at all.
+ */
+export const donationSchema = z
+  .object({
+    toCharacterId: z.string().uuid(),
+    coins: z.number().int().min(1).max(1_000_000),
+  })
+  .strict();
+
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
 export type CharacterCreateInput = z.input<typeof characterCreateSchema>;
@@ -154,6 +166,8 @@ export type CharacterCreate = z.output<typeof characterCreateSchema>;
 export type CharacterPatchInput = z.input<typeof characterPatchSchema>;
 export type CharacterPatch = z.output<typeof characterPatchSchema>;
 export type ActionParams = z.output<typeof actionParamsSchema>;
+export type DonationInput = z.input<typeof donationSchema>;
+export type Donation = z.output<typeof donationSchema>;
 export type TournamentOptInInput = z.input<typeof tournamentOptInSchema>;
 export type ActionRequestInput = z.input<typeof actionRequestSchema>;
 export type ActionRequestBody = z.output<typeof actionRequestSchema>;

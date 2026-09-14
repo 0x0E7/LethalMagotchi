@@ -1,6 +1,7 @@
 import type { ChatService } from './chat/service.js';
 import type { Config } from './config.js';
 import type { DuelService } from './duel/service.js';
+import type { RaidService } from './raid/service.js';
 import type { Db } from './db/pool.js';
 import { RateLimiter, type RateLimiterOptions } from './rate-limit.js';
 import type { TournamentService } from './tournament/service.js';
@@ -22,6 +23,10 @@ export interface Limiters {
   duelInvite: RateLimiter;
   duelAction: RateLimiter;
   duelResync: RateLimiter;
+  raidCreate: RateLimiter;
+  raidAction: RateLimiter;
+  raidResync: RateLimiter;
+  donation: RateLimiter;
 }
 
 export interface ServerDeps {
@@ -33,6 +38,7 @@ export interface ServerDeps {
   tournaments: TournamentService;
   chat: ChatService;
   duels: DuelService;
+  raids: RaidService;
 }
 
 /** `now` is injectable so a test can assert the *production* numbers, not a copy of them. */
@@ -111,5 +117,30 @@ export function createLimiters(now?: () => number): Limiters {
       maxBackoffMs: 60_000,
       strikeDecayMs: 10 * 60_000,
     }),
+    // Starting a raid is the harassment primitive here, and it is a heavier one than a duel
+    // invite: the target cannot decline. Targeted repetition is already bounded by the 24h
+    // per-target immunity and the 6h per-raider cooldown, so this only has to stop spraying.
+    raidCreate: limiter({
+      limit: 4,
+      windowMs: 10 * 60_000,
+      maxBackoffMs: 60 * 60_000,
+      strikeDecayMs: 30 * 60_000,
+    }),
+    // Everything else a raid sends: invites, answers, the lock, betrayals, parity calls.
+    raidAction: limiter({
+      limit: 30,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    raidResync: limiter({
+      limit: 10,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    // A donation moves real coins, and a rescued beggar stops being eligible immediately, so
+    // an honest donor needs very few of these.
+    donation: limiter({ limit: 10, windowMs: 60 * 60_000, maxBackoffMs: 60 * 60_000 }),
   };
 }

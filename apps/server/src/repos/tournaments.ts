@@ -498,7 +498,7 @@ export async function listEligibleCharacterIds(
   const result = await db.query<{ id: string; tournament_opt_in: boolean }>(
     `SELECT id, tournament_opt_in FROM characters
      WHERE deleted_at IS NULL AND account_id IS NOT NULL AND seated_table_id IS NULL
-       AND active_duel_id IS NULL
+       AND active_duel_id IS NULL AND active_raid_id IS NULL
      ORDER BY id`,
   );
   return result.rows;

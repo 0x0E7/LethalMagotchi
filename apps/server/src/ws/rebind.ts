@@ -1,5 +1,6 @@
 import type { ServerMessage } from '@lethalmagotchi/shared';
 import type { DuelService } from '../duel/service.js';
+import type { RaidService } from '../raid/service.js';
 import type { TournamentService } from '../tournament/service.js';
 import type { Hub } from './hub.js';
 
@@ -12,7 +13,7 @@ import type { Hub } from './hub.js';
  * socket is bound to", and both the channel refetch and the table resync are wired to it.
  */
 export function rebindAccountCharacter(
-  deps: { hub: Hub; tournaments: TournamentService; duels: DuelService },
+  deps: { hub: Hub; tournaments: TournamentService; duels: DuelService; raids: RaidService },
   accountId: string,
   characterId: string | null,
 ): void {
@@ -25,10 +26,12 @@ export function rebindAccountCharacter(
     if (previousCharacterId) {
       deps.tournaments.onCharacterOffline(previousCharacterId);
       deps.duels.onCharacterOffline(previousCharacterId);
+      deps.raids.onCharacterOffline(previousCharacterId);
     }
   }
   if (characterId) {
     deps.tournaments.onCharacterOnline(characterId);
     deps.duels.onCharacterOnline(characterId);
+    deps.raids.onCharacterOnline(characterId);
   }
 }

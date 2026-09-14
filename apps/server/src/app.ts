@@ -11,6 +11,7 @@ import { ApiError } from './errors.js';
 import { registerActionRoutes } from './routes/actions.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerChatRoutes } from './routes/chat.js';
+import { registerDonationRoutes } from './routes/donations.js';
 import { registerDuelRoutes } from './routes/duels.js';
 import { registerCharacterRoutes } from './routes/characters.js';
 import { registerReferenceRoutes } from './routes/reference.js';
@@ -112,6 +113,7 @@ export async function buildApp(deps: ServerDeps): Promise<FastifyInstance> {
   await registerTournamentRoutes(app, deps);
   await registerChatRoutes(app, deps);
   await registerDuelRoutes(app, deps);
+  await registerDonationRoutes(app, deps);
 
   if (serveSpa) {
     await app.register(fastifyStatic, { root: path.resolve(config.clientDist as string) });

@@ -40,9 +40,13 @@ export interface CharacterDto {
   tournamentWins: number;
   seatedTableId: string | null;
   activeDuelId: string | null;
+  activeRaidId: string | null;
   duelWins: number;
   duelLosses: number;
   chickenBadgeUntil: string | null;
+  raidImmunityUntil: string | null;
+  /** Derived from `lethalCoins`, never stored — carried so the badge has one source. */
+  isBeggar: boolean;
   rebirthCount: number;
   lastRebirthAt: string | null;
 }
@@ -130,8 +134,12 @@ export const API_ERROR_CODES = [
   'ACTION_ON_COOLDOWN',
   'CHARACTER_SEATED',
   'CHARACTER_IN_DUEL',
+  'CHARACTER_IN_RAID',
   /** Coins already promised to a pending duel invite cannot be spent while it is live. */
   'DUEL_STAKE_RESERVED',
+  /** A donation may only reach a character who currently holds nothing. */
+  'NOT_A_BEGGAR',
+  'SELF_DONATION',
   'BLOCKED',
   'NOT_FOUND',
   'INTERNAL_ERROR',
