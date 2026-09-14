@@ -16,7 +16,8 @@ const opponent: DuelPlayerView = {
   accountId: 'them-account',
   nickname: 'Pepper',
   speciesId: 'fox',
-  lethalCoins: 40,
+  wealthBand: 'wealthy',
+  isBeggar: false,
   duelWins: 3,
   duelLosses: 1,
 };
@@ -26,11 +27,13 @@ const card: DuelCardDto = {
   accountId: 'them-account',
   nickname: 'Pepper',
   speciesId: 'fox',
-  lethalCoins: 40,
+  wealthBand: 'wealthy',
+  isBeggar: false,
   duelWins: 3,
   duelLosses: 1,
   chickenBadgeUntil: null,
   duelEligible: true,
+  raidEligible: true,
 };
 
 /** A fixed "now", so a frame's deadline is in the past or the future by construction. */

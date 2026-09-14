@@ -11,6 +11,19 @@ import {
   type DuelSide,
   type DuelThrow,
 } from './duel.js';
+import {
+  BETRAYAL_CHOICES,
+  PARITY_CALLS,
+  PARITY_THROW_MAX,
+  PARITY_THROW_MIN,
+  type BetrayalChoice,
+  type ParityCall,
+  type RaidErrorCode,
+  type RaidMemberView,
+  type RaidOutcome,
+  type RaidTargetView,
+  type WealthBand,
+} from './raid.js';
 import type { RebirthCause } from './rebirth.js';
 import type { CharacterStats } from './stats.js';
 import type { CharacterDto } from './types.js';
@@ -114,6 +127,41 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
    * server answers with whatever duel the socket's character is actually in.
    */
   z.object({ type: z.literal('duel:resync'), duelId: z.string().uuid().optional() }).strict(),
+  z.object({ type: z.literal('raid:create'), targetCharacterId: z.string().uuid() }).strict(),
+  z
+    .object({ type: z.literal('raid:invite'), raidId: z.string().uuid(), characterId: z.string().uuid() })
+    .strict(),
+  z.object({ type: z.literal('raid:respond'), raidId: z.string().uuid(), accept: z.boolean() }).strict(),
+  /** The initiator fires it; nobody else can, and nobody's coins move before it. */
+  z.object({ type: z.literal('raid:lock'), raidId: z.string().uuid() }).strict(),
+  z
+    .object({
+      type: z.literal('raid:betray'),
+      raidId: z.string().uuid(),
+      seq: z.number().int().min(0).max(10_000),
+      choice: z.enum(BETRAYAL_CHOICES),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('raid:parity'),
+      raidId: z.string().uuid(),
+      seq: z.number().int().min(0).max(10_000),
+      call: z.enum(PARITY_CALLS),
+      throw: z.number().int().min(PARITY_THROW_MIN).max(PARITY_THROW_MAX),
+    })
+    .strict(),
+  /**
+   * `raidId` is optional for the same reason the duel's is: a client that reloaded has no id
+   * to name, and the server answers with whatever raid the socket's character is in.
+   */
+  z.object({ type: z.literal('raid:resync'), raidId: z.string().uuid().optional() }).strict(),
+  /**
+   * Sent when the aftermath card has actually been shown. The report is the only notice a
+   * bankrupted, offline target ever gets, so the server keeps offering it until this lands
+   * rather than retiring it on a send that a dropped socket may have swallowed.
+   */
+  z.object({ type: z.literal('raid:aftermath_ack'), raidId: z.string().uuid() }).strict(),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -283,6 +331,105 @@ export type ServerMessage =
       coinsTransferred: number;
       rebirth: { characterId: string; rebirthIndex: number } | null;
     }
-  | { type: 'duel:error'; code: DuelErrorCode; message: string };
+  | { type: 'duel:error'; code: DuelErrorCode; message: string }
+  /** Unicast to an invited raider. The target is described by band, never by balance. */
+  | {
+      type: 'raid:invited';
+      raidId: string;
+      from: RaidMemberView;
+      target: RaidTargetView;
+      expiresAt: string;
+    }
+  | {
+      type: 'raid:party';
+      raidId: string;
+      target: RaidTargetView;
+      members: RaidMemberView[];
+      /** The party's own pot, banded like everything else on a raid surface. */
+      raidPotBand: WealthBand;
+      initiatorCharacterId: string;
+      state: 'assembling' | 'resolving';
+      expiresAt: string | null;
+    }
+  | { type: 'raid:cancelled'; raidId: string; reason: 'EXPIRED' | 'PARTY_TOO_SMALL' | 'SERVER_RESTART' }
+  /**
+   * The first frame in which either total is a number rather than a band, and it is only
+   * ever sent once the comparison is committed.
+   */
+  | {
+      type: 'raid:result';
+      raidId: string;
+      outcome: RaidOutcome;
+      raidPot: number;
+      targetPot: number;
+      /** What the betrayal phase is played for; 0 on a target win or a void. */
+      potCoins: number;
+    }
+  | { type: 'raid:betrayal_window'; raidId: string; seq: number; deadlineAt: string; potCoins: number }
+  /**
+   * The fact of a lock and nothing else — the choice stays server-side until the reveal.
+   * Both hidden-commit windows send it, so it names the one it belongs to: a lock landing
+   * either side of a reveal beat would otherwise be attributed to whichever window the
+   * client happened to have open.
+   */
+  | {
+      type: 'raid:betrayal_locked';
+      raidId: string;
+      characterId: string;
+      phase: 'betrayal' | 'parity';
+      seq: number;
+    }
+  | {
+      type: 'raid:betrayal_result';
+      raidId: string;
+      seq: number;
+      choices: { characterId: string; choice: BetrayalChoice }[];
+      awards: { characterId: string; coins: number }[];
+      potDestroyed: boolean;
+      remainder: number;
+    }
+  | {
+      type: 'raid:parity_round';
+      raidId: string;
+      seq: number;
+      round: number;
+      deadlineAt: string;
+      remainder: number;
+      contenders: string[];
+    }
+  | {
+      type: 'raid:parity_result';
+      raidId: string;
+      seq: number;
+      round: number;
+      calls: { characterId: string; call: ParityCall; throw: number }[];
+      parity: ParityCall;
+      winners: string[];
+      awards: { characterId: string; coins: number }[];
+      /** Set when the round cap decided it instead of the calls. */
+      seededSplit: boolean;
+    }
+  | {
+      type: 'raid:end';
+      raidId: string;
+      outcome: RaidOutcome;
+      coinsReceived: number;
+      bankrupted: string[];
+      potDestroyed: boolean;
+    }
+  /** For the target, who was never there. Delivered on next connect if they were offline. */
+  | {
+      type: 'raid:aftermath';
+      raidId: string;
+      raiders: { characterId: string; nickname: string; speciesId: string }[];
+      outcome: RaidOutcome;
+      raidPot: number;
+      targetPot: number;
+      /** Negative when the target won and inherited the raiders' escrow. */
+      coinsLost: number;
+      nowBeggar: boolean;
+      at: string;
+    }
+  | { type: 'raid:error'; code: RaidErrorCode; message: string };
 
 export type ServerMessageType = ServerMessage['type'];

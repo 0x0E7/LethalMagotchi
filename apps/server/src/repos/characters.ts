@@ -1,10 +1,15 @@
 import {
   STARTING_LETHAL_COINS,
   STARTING_STATS,
+  isBeggarWallet,
   isOldEnoughToDuel,
+  isOldEnoughToRaid,
+  isRaidImmune,
+  isRaidableWealth,
   normalizeStats,
   roundStats,
   simulateCharacter,
+  wealthBandOf,
   type CharacterCreate,
   type CharacterDto,
   type DuelCardDto,
@@ -39,11 +44,20 @@ export interface CharacterRow {
   tournament_wins: number;
   seated_table_id: string | null;
   active_duel_id: string | null;
+  active_raid_id: string | null;
   duel_wins: number;
   duel_losses: number;
   chicken_badge_until: Date | null;
+  raid_immunity_until: Date | null;
+  last_raid_at: Date | null;
+  last_donation_appeal_at: Date | null;
   rebirth_count: number;
   last_rebirth_at: Date | null;
+}
+
+/** The one predicate every "is this character free to commit" check goes through. */
+export function isEngaged(row: CharacterRow): boolean {
+  return Boolean(row.seated_table_id ?? row.active_duel_id ?? row.active_raid_id);
 }
 
 export { STARTING_STATS, STARTING_LETHAL_COINS };
@@ -85,17 +99,22 @@ export function toCharacterDto(row: CharacterRow, now: number = Date.now()): Cha
     tournamentWins: row.tournament_wins,
     seatedTableId: row.seated_table_id,
     activeDuelId: row.active_duel_id,
+    activeRaidId: row.active_raid_id,
     duelWins: row.duel_wins,
     duelLosses: row.duel_losses,
     chickenBadgeUntil: row.chicken_badge_until ? row.chicken_badge_until.toISOString() : null,
+    raidImmunityUntil: row.raid_immunity_until ? row.raid_immunity_until.toISOString() : null,
+    isBeggar: isBeggarWallet(row.lethal_coins, row.active_raid_id),
     rebirthCount: row.rebirth_count,
     lastRebirthAt: row.last_rebirth_at ? row.last_rebirth_at.toISOString() : null,
   };
 }
 
 /**
- * The public duel standing of a character: their wallet (which is what a challenger is
- * risking, so it cannot be hidden), their record, and their chicken badge.
+ * The public standing of a character: their wealth as a *band*, their beggar state, their
+ * record, and their badges. The exact balance deliberately does not appear — raiders pick
+ * targets off this card, and an exact number would make a raid a calculated certainty
+ * rather than a risk.
  */
 export function toDuelCardDto(row: CharacterRow, now: number = Date.now()): DuelCardDto {
   return {
@@ -103,12 +122,20 @@ export function toDuelCardDto(row: CharacterRow, now: number = Date.now()): Duel
     accountId: row.account_id,
     nickname: row.nickname,
     speciesId: row.species_id,
-    lethalCoins: row.lethal_coins,
+    wealthBand: wealthBandOf(row.lethal_coins),
+    isBeggar: isBeggarWallet(row.lethal_coins, row.active_raid_id),
     duelWins: row.duel_wins,
     duelLosses: row.duel_losses,
     chickenBadgeUntil: row.chicken_badge_until ? row.chicken_badge_until.toISOString() : null,
-    duelEligible:
-      isOldEnoughToDuel(row.created_at, now) && !row.seated_table_id && !row.active_duel_id,
+    duelEligible: isOldEnoughToDuel(row.created_at, now) && !isEngaged(row),
+    /**
+     * The target's own floors, so the UI never offers a raid that must fail. The engagement
+     * lock is deliberately *not* part of it: a target does not have to be idle to be raided.
+     */
+    raidEligible:
+      isOldEnoughToRaid(row.created_at, now) &&
+      isRaidableWealth(row.lethal_coins) &&
+      !isRaidImmune(row.raid_immunity_until, now),
   };
 }
 
@@ -302,6 +329,78 @@ export async function setChickenBadge(
     [characterId, until],
   );
   return result.rows[0] ?? null;
+}
+
+/**
+ * The appeal's 3h floor, claimed rather than checked: the condition is part of the write, so
+ * two appeals racing each other resolve to one poster. Null means the floor refused it, and
+ * the row it returns carries the timestamp the refusal can be quoted from.
+ */
+export async function claimDonationAppeal(
+  client: DbClient,
+  characterId: string,
+  input: { at: Date; notBefore: Date },
+): Promise<CharacterRow | null> {
+  const result = await client.query<CharacterRow>(
+    `UPDATE characters SET last_donation_appeal_at = $2, updated_at = now()
+     WHERE id = $1 AND (last_donation_appeal_at IS NULL OR last_donation_appeal_at <= $3)
+     RETURNING *`,
+    [characterId, input.at, input.notBefore],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * The raid half of the engagement lock. Set when a raider joins — so a committed raider
+ * cannot also sit down at a table, accept a duel or spend in the shop — and cleared in the
+ * settlement transaction or the compensating cancel, never anywhere else.
+ */
+export async function setActiveRaid(
+  client: DbClient,
+  characterId: string,
+  raidId: string | null,
+): Promise<void> {
+  await client.query('UPDATE characters SET active_raid_id = $2, updated_at = now() WHERE id = $1', [
+    characterId,
+    raidId,
+  ]);
+}
+
+/**
+ * The escrow move, and the bankruptcy move: a raid stakes whole wallets, so both are the
+ * same write. Returns the coins that were taken, read back from the row rather than from an
+ * earlier read, so nothing can be escrowed twice or taken from a wallet that moved.
+ */
+export async function drainCoins(
+  client: DbClient,
+  characterId: string,
+): Promise<{ taken: number; character: CharacterRow }> {
+  // The CTE reads the pre-update snapshot, so the amount taken is the row's own number
+  // rather than one the caller carried in from an earlier read.
+  const result = await client.query<CharacterRow & { taken: number }>(
+    `WITH before AS (SELECT lethal_coins FROM characters WHERE id = $1)
+     UPDATE characters SET lethal_coins = 0, updated_at = now()
+     WHERE id = $1
+     RETURNING *, (SELECT lethal_coins FROM before) AS taken`,
+    [characterId],
+  );
+  const row = result.rows[0]!;
+  return { taken: row.taken, character: row };
+}
+
+/** The target's rolling immunity and the raiders' rolling cooldown, written together. */
+export async function recordRaidParticipation(
+  client: DbClient,
+  input: { targetCharacterId: string; raiderCharacterIds: string[]; immuneUntil: Date; at: Date },
+): Promise<void> {
+  await client.query(
+    'UPDATE characters SET raid_immunity_until = $2, updated_at = now() WHERE id = $1',
+    [input.targetCharacterId, input.immuneUntil],
+  );
+  await client.query(
+    'UPDATE characters SET last_raid_at = $2, updated_at = now() WHERE id = ANY($1::uuid[])',
+    [input.raiderCharacterIds, input.at],
+  );
 }
 
 export async function creditCoins(

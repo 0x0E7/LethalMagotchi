@@ -8,6 +8,7 @@ import type { Config } from '../../src/config.js';
 import { DEFAULT_TOURNAMENT_CONFIG, REFRESH_COOKIE_NAME } from '../../src/config.js';
 import { createPool, type Db } from '../../src/db/pool.js';
 import { DuelService } from '../../src/duel/service.js';
+import { RaidService } from '../../src/raid/service.js';
 import { createLimiters, type Limiters } from '../../src/deps.js';
 import { RateLimiter } from '../../src/rate-limit.js';
 import { TournamentService } from '../../src/tournament/service.js';
@@ -66,6 +67,7 @@ export interface TestApp {
   tournaments: TournamentService;
   chat: ChatService;
   duels: DuelService;
+  raids: RaidService;
 }
 
 /**
@@ -92,6 +94,10 @@ export function relaxedLimiters(): Limiters {
     duelInvite: generous(),
     duelAction: generous(),
     duelResync: generous(),
+    raidCreate: generous(),
+    raidAction: generous(),
+    raidResync: generous(),
+    donation: generous(),
   };
 }
 
@@ -109,6 +115,7 @@ export async function createTestApp(
     tournaments?: TournamentService;
     chat?: ChatService;
     duels?: DuelService;
+    raids?: RaidService;
   } = {},
 ): Promise<TestApp> {
   const config = testConfig(options.config);
@@ -119,6 +126,7 @@ export async function createTestApp(
     options.tournaments ?? new TournamentService({ db, hub, config: config.tournament });
   const chat = options.chat ?? new ChatService({ db, hub, limiters });
   const duels = options.duels ?? new DuelService({ db, hub, chat, limiters });
+  const raids = options.raids ?? new RaidService({ db, hub, limiters });
   const app = await buildApp({
     config,
     db,
@@ -128,8 +136,9 @@ export async function createTestApp(
     tournaments,
     chat,
     duels,
+    raids,
   });
-  return { app, db, limiters, config, hub, tournaments, chat, duels };
+  return { app, db, limiters, config, hub, tournaments, chat, duels, raids };
 }
 
 /** Usernames must satisfy ^[a-z0-9_]{3,20}$; keep them unique so tests never collide. */

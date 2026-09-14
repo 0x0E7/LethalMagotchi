@@ -2482,3 +2482,162 @@ button.chat-author {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Raids and the beggar state
+ * ------------------------------------------------------------------ */
+
+/* Deliberately the same weight and register as the chicken badge: a plain state, not a
+   punishment. No rags, no comedy, no pity styling. */
+.beggar-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-sunken, var(--accent-soft));
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.chat-raid,
+.chat-donate {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.beggar-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.raid-chip {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 40;
+}
+
+.raid-party {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.raid-party-member {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.raid-party-member.invited {
+  opacity: 0.65;
+}
+
+.raid-party-name {
+  font-weight: 700;
+}
+
+.raid-arena {
+  display: grid;
+  gap: 24px;
+  align-content: start;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+
+.raid-totals {
+  display: grid;
+  gap: 8px;
+}
+
+.raid-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.raid-total-value {
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.raid-verdict {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+
+.raid-phase {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.raid-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.raid-choices,
+.raid-awards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.raid-choices li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.raid-choice {
+  color: var(--ink-muted);
+}
+
+/* The b == n case gets its own still, quiet beat: no jeering, no confetti. */
+.raid-burn {
+  margin: 0;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+/* The aftermath leads with this, because the scariest reading of "you were raided" is the
+   wrong one and it has to be closed in the same glance. */
+.raid-reassurance {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.raid-call {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}

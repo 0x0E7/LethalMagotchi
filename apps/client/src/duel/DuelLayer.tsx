@@ -1,4 +1,4 @@
-import { duelStakeCoins, type CharacterDto } from '@lethalmagotchi/shared';
+import type { CharacterDto } from '@lethalmagotchi/shared';
 import { useDuel } from './DuelProvider.js';
 import { StakesCard } from './StakesCard.js';
 
@@ -26,7 +26,8 @@ export function DuelLayer({ character }: { character: CharacterDto }) {
         you={{ nickname: character.nickname, lethalCoins: character.lethalCoins }}
         them={{
           nickname: incoming.from.nickname,
-          lethalCoins: incoming.from.lethalCoins,
+          wealthBand: incoming.from.wealthBand,
+          isBeggar: incoming.from.isBeggar,
           duelWins: incoming.from.duelWins,
           duelLosses: incoming.from.duelLosses,
         }}
@@ -43,9 +44,14 @@ export function DuelLayer({ character }: { character: CharacterDto }) {
 
   if (!outgoing) return null;
 
-  // Once the invite exists the server's snapshot is what will actually be played for, and
-  // it is what the target was shown; before that this is an estimate of the same number.
-  const stake = outgoing.stakeCoins ?? duelStakeCoins(character.lethalCoins, outgoing.target.lethalCoins);
+  /**
+   * The server's snapshot once the invite exists — it is what the target was shown and what
+   * the challenger is held to. Null while composing, and deliberately not estimated:
+   * `min(both wallets)` would need the opponent's exact balance, which the public card no
+   * longer carries and a would-be raider must never be able to read off it. The card says
+   * "at most your own wallet" instead, which is true and gives nothing away.
+   */
+  const stake = outgoing.stakeCoins;
   const resolved = outgoing.phase === 'resolved' && outgoing.state;
   const status = resolved
     ? outgoing.state === 'cancelled'
@@ -61,7 +67,8 @@ export function DuelLayer({ character }: { character: CharacterDto }) {
       you={{ nickname: character.nickname, lethalCoins: character.lethalCoins }}
       them={{
         nickname: outgoing.target.nickname,
-        lethalCoins: outgoing.target.lethalCoins,
+        wealthBand: outgoing.target.wealthBand,
+        isBeggar: outgoing.target.isBeggar,
         duelWins: outgoing.target.duelWins,
         duelLosses: outgoing.target.duelLosses,
         chickenBadgeUntil: outgoing.target.chickenBadgeUntil,

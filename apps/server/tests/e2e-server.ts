@@ -23,6 +23,7 @@ import { DEFAULT_TOURNAMENT_CONFIG } from '../src/config.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createPool } from '../src/db/pool.js';
 import { DuelService } from '../src/duel/service.js';
+import { RaidService } from '../src/raid/service.js';
 import { seedReferenceData } from '../src/db/seed.js';
 import type { Limiters } from '../src/deps.js';
 import { RateLimiter } from '../src/rate-limit.js';
@@ -110,6 +111,28 @@ function e2eLimiters(): Limiters {
       maxBackoffMs: 60_000,
       strikeDecayMs: 10 * 60_000,
     }),
+    // Production settings: keyed per account, and each spec uses fresh accounts.
+    raidCreate: new RateLimiter({
+      limit: 4,
+      windowMs: 10 * 60_000,
+      maxBackoffMs: 60 * 60_000,
+      strikeDecayMs: 30 * 60_000,
+    }),
+    raidAction: new RateLimiter({
+      limit: 30,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    raidResync: new RateLimiter({
+      limit: 10,
+      windowMs: 10_000,
+      maxBackoffMs: 60_000,
+      strikeDecayMs: 10 * 60_000,
+    }),
+    donation: new RateLimiter({ limit: 10, windowMs: 60 * 60_000, maxBackoffMs: 60 * 60_000 }),
+    // Deliberately generous in e2e: one spec posts an appeal, and the 3h production cooldown
+    // is keyed per character, which a re-run inside three hours would trip on a fixture.
   };
 }
 
@@ -135,6 +158,19 @@ const duels = new DuelService({
   revealMs: Number(process.env.E2E_DUEL_REVEAL_MS ?? 300),
 });
 
+/**
+ * The real protocol and the real windows; only the between-beat is shortened so a betrayal
+ * phase and a parity round fit inside a Playwright test's budget.
+ */
+const raids = new RaidService({
+  db,
+  hub,
+  limiters,
+  revealMs: Number(process.env.E2E_RAID_REVEAL_MS ?? 300),
+  betrayalMs: Number(process.env.E2E_RAID_BETRAYAL_MS ?? 12_000),
+  parityMs: Number(process.env.E2E_RAID_PARITY_MS ?? 10_000),
+});
+
 const app = await buildApp({
   config,
   db,
@@ -144,11 +180,13 @@ const app = await buildApp({
   tournaments,
   chat,
   duels,
+  raids,
 });
 
 const shutdown = async () => {
   await tournaments.stop();
   await duels.stop();
+  await raids.stop();
   hub.closeAll();
   await app.close();
   await db.end();
@@ -168,6 +206,7 @@ try {
 }
 
 await duels.start();
+await raids.start();
 
 await app.listen({ port: config.port, host: config.host });
 // eslint-disable-next-line no-console

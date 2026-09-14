@@ -82,7 +82,7 @@ class ConnectionCounter {
 }
 
 export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps): Promise<void> {
-  const { db, hub, tournaments, chat, duels, limiters } = deps;
+  const { db, hub, tournaments, chat, duels, raids, limiters } = deps;
 
   await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
 
@@ -233,6 +233,7 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
               if (bound) {
                 tournaments.onCharacterOnline(bound);
                 duels.onCharacterOnline(bound);
+                raids.onCharacterOnline(bound);
               }
             } catch (error) {
               // This runs detached from the message handler, so an unhandled rejection here
@@ -256,14 +257,15 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
 
         const isChatFrame = message.type.startsWith('chat:');
         const isDuelFrame = message.type.startsWith('duel:');
+        const isRaidFrame = message.type.startsWith('raid:');
 
         const bound = connection;
         const boundCharacterId = bound?.characterId ?? null;
         if (!bound || !boundCharacterId) {
           send({
-            // Chat and duels are gated on having a character just like play is, but say so
-            // in their own words: "not seated" is about a table those frames never asked about.
-            code: isChatFrame || isDuelFrame ? 'NO_CHARACTER' : 'NOT_SEATED',
+            // Chat, duels and raids are gated on having a character just like play is, but say
+            // so in their own words: "not seated" is about a table those frames never asked about.
+            code: isChatFrame || isDuelFrame || isRaidFrame ? 'NO_CHARACTER' : 'NOT_SEATED',
             type: 'error',
             message: 'You do not have a character.',
           });
@@ -312,6 +314,24 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
           return;
         }
 
+        if (
+          message.type === 'raid:create' ||
+          message.type === 'raid:invite' ||
+          message.type === 'raid:respond' ||
+          message.type === 'raid:lock' ||
+          message.type === 'raid:betray' ||
+          message.type === 'raid:parity' ||
+          message.type === 'raid:resync' ||
+          message.type === 'raid:aftermath_ack'
+        ) {
+          // Detached from the message handler, so a rejection here would otherwise take the
+          // whole process down: one bad socket must only ever cost that socket.
+          void raids
+            .handle(bound, message)
+            .catch((error: unknown) => app.log.error({ err: error }, 'raid frame failed'));
+          return;
+        }
+
         if (message.type === 'tourney:resync') {
           const resyncFlood = limiters.wsResync.check(connectionId);
           if (!resyncFlood.allowed) {
@@ -345,6 +365,7 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
         if (characterId) {
           tournaments.onCharacterOffline(characterId);
           duels.onCharacterOffline(characterId);
+          raids.onCharacterOffline(characterId);
         }
       });
     },

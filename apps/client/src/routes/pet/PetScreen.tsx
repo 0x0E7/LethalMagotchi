@@ -15,6 +15,8 @@ import {
 import { ApiRequestError, NetworkError } from '../../api/client.js';
 import { ChatPanel } from '../../chat/ChatPanel.js';
 import { DuelLayer } from '../../duel/DuelLayer.js';
+import { BeggarStrip } from '../../raid/BeggarStrip.js';
+import { RaidLayer } from '../../raid/RaidLayer.js';
 import { useReference } from '../../hooks/useReference.js';
 import { useSession } from '../../session/SessionProvider.js';
 import { useTournament } from '../../tournament/TournamentProvider.js';
@@ -150,6 +152,8 @@ export function PetScreen({ character }: { character: CharacterDto }) {
             <span aria-hidden="true">🪙</span> {character.lethalCoins}
           </span>
 
+          <BeggarStrip character={character} />
+
           <label className="field-inline">
             <span className="sr-only">Action animations</span>
             <select
@@ -216,6 +220,7 @@ export function PetScreen({ character }: { character: CharacterDto }) {
 
       <ChatPanel />
       <DuelLayer character={character} />
+      <RaidLayer character={character} />
 
       {rebirth && <RebirthCard character={character} />}
       {!rebirth && outcome && <OutcomeCard outcome={outcome} youId={character.id} />}

@@ -1,3 +1,5 @@
+import type { WealthBand } from './raid.js';
+
 export const DUEL_THROWS = ['rock', 'paper', 'scissors'] as const;
 export type DuelThrow = (typeof DUEL_THROWS)[number];
 
@@ -81,29 +83,42 @@ export const DUEL_ERROR_MESSAGES: Record<DuelErrorCode, string> = {
 
 export type DuelSide = 'challenger' | 'opponent';
 
-/** How one duelist is described to the other. Never carries anything private. */
+/**
+ * How one duelist is described to the other. Never carries anything private — and, since
+ * raids are decided by a wallet comparison, never an exact balance either: a public number
+ * would turn raid banding into decoration. The stake is server-snapshotted and travels on
+ * its own frames.
+ */
 export interface DuelPlayerView {
   characterId: string;
   accountId: string | null;
   nickname: string;
   speciesId: string;
-  lethalCoins: number;
+  wealthBand: WealthBand;
+  isBeggar: boolean;
   duelWins: number;
   duelLosses: number;
 }
 
-/** The public duel standing of a character, shown next to their name in the Town Square. */
+/**
+ * The public standing of a character, shown next to their name in the Town Square. Exact
+ * balances deliberately do not appear here: a player's own figure comes from their session
+ * character, and a duel stake comes from the server's snapshot of it.
+ */
 export interface DuelCardDto {
   characterId: string;
   accountId: string | null;
   nickname: string;
   speciesId: string;
-  lethalCoins: number;
+  wealthBand: WealthBand;
+  isBeggar: boolean;
   duelWins: number;
   duelLosses: number;
   chickenBadgeUntil: string | null;
   /** Server's own read of the 24h account-age floor, so the UI never offers an invite that must fail. */
   duelEligible: boolean;
+  /** The same read for raids: age floor, engagement lock, immunity and the wealth floor. */
+  raidEligible: boolean;
 }
 
 export interface DuelCardsResponse {

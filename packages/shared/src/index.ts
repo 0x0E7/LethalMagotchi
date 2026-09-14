@@ -6,6 +6,7 @@ export * from './actions.js';
 export * from './cards.js';
 export * from './chat.js';
 export * from './duel.js';
+export * from './raid.js';
 export * from './rebirth.js';
 export * from './tournament.js';
 export * from './schedule.js';

@@ -68,6 +68,13 @@ export async function registerActionRoutes(app: FastifyInstance, deps: ServerDep
       if (row.active_duel_id) {
         throw new ApiError(409, 'CHARACTER_IN_DUEL', 'You are in a duel right now.');
       }
+      /**
+       * The third leg of the same rule. A raid stakes the *whole* wallet, so from the moment
+       * a raider joins a party every coin they hold is spoken for.
+       */
+      if (row.active_raid_id) {
+        throw new ApiError(409, 'CHARACTER_IN_RAID', 'You are in a raid right now.');
+      }
 
       const now = Date.now();
       const outcome = resolveAction(

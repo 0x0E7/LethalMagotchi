@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App.js';
 import { ChatProvider } from './chat/ChatProvider.js';
 import { DuelProvider } from './duel/DuelProvider.js';
+import { RaidProvider } from './raid/RaidProvider.js';
 import { SessionProvider } from './session/SessionProvider.js';
 import { TournamentProvider } from './tournament/TournamentProvider.js';
 import { SocketProvider } from './ws/SocketProvider.js';
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
           <TournamentProvider>
             <ChatProvider>
               <DuelProvider>
-                <App />
+                <RaidProvider>
+                  <App />
+                </RaidProvider>
               </DuelProvider>
             </ChatProvider>
           </TournamentProvider>

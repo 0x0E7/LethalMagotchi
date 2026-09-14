@@ -7,9 +7,11 @@ import {
   TOWN_SQUARE_CHANNEL_ID,
   chickenBadgeUntil,
   duelStakeCoins,
+  isBeggarWallet,
   isDeclineCooldownActive,
   isOldEnoughToDuel,
   roundStats,
+  wealthBandOf,
   type ClientMessage,
   type DuelErrorCode,
   type DuelPlayerView,
@@ -283,11 +285,11 @@ export class DuelService {
       this.error(connection, 'BLOCKED');
       return;
     }
-    if (me.seated_table_id || me.active_duel_id) {
+    if (me.seated_table_id || me.active_duel_id || me.active_raid_id) {
       this.error(connection, 'BUSY');
       return;
     }
-    if (target.seated_table_id || target.active_duel_id) {
+    if (target.seated_table_id || target.active_duel_id || target.active_raid_id) {
       this.error(connection, 'TARGET_BUSY');
       return;
     }
@@ -405,8 +407,10 @@ export class DuelService {
 
         const challengerRow = rows.get(invite.from_character_id)!;
         const opponentRow = rows.get(invite.to_character_id)!;
-        if (opponentRow.seated_table_id || opponentRow.active_duel_id) throw new AcceptBlocked('BUSY');
-        if (challengerRow.seated_table_id || challengerRow.active_duel_id) {
+        if (opponentRow.seated_table_id || opponentRow.active_duel_id || opponentRow.active_raid_id) {
+          throw new AcceptBlocked('BUSY');
+        }
+        if (challengerRow.seated_table_id || challengerRow.active_duel_id || challengerRow.active_raid_id) {
           throw new AcceptBlocked('TARGET_BUSY');
         }
         // Both have to still be at the keyboard: a duel neither can be paused nor fled is
@@ -1103,7 +1107,8 @@ function playerView(row: CharacterRow): DuelPlayerView {
     accountId: row.account_id,
     nickname: row.nickname,
     speciesId: row.species_id,
-    lethalCoins: row.lethal_coins,
+    wealthBand: wealthBandOf(row.lethal_coins),
+    isBeggar: isBeggarWallet(row.lethal_coins, row.active_raid_id),
     duelWins: row.duel_wins,
     duelLosses: row.duel_losses,
   };

@@ -449,7 +449,7 @@ export class TournamentService {
        * there. Charging entry here could rebirth them mid-duel, so they are skipped
        * entirely — the duel-side half of the same symmetric lock `seated_table_id` gets.
        */
-      if (row.active_duel_id) return null;
+      if (row.active_duel_id ?? row.active_raid_id) return null;
 
       const at = new Date(this.clock.now());
       /**
@@ -639,7 +639,7 @@ export class TournamentService {
         // deadlock on a shared character.
         for (const characterId of [...seatIds].sort()) {
           const row = await lockCharacterById(client, characterId);
-          if (!row || row.active_duel_id) refused.push(characterId);
+          if (!row || (row.active_duel_id ?? row.active_raid_id)) refused.push(characterId);
           else kept.add(characterId);
         }
 

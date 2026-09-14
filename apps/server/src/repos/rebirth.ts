@@ -40,6 +40,10 @@ export async function rebirthCharacter(
          last_rebirth_at = $4,
          seated_table_id = NULL,
          active_duel_id = NULL,
+         -- All three legs of the engagement lock, defensively: a renewed character holding
+         -- a lock on a commitment its predecessor made is refused every action until the
+         -- lock's own timeout clears it.
+         active_raid_id = NULL,
          updated_at = now()
      WHERE id = $1
      RETURNING *`,

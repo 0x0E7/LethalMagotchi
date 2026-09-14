@@ -5,3 +5,4 @@
  */
 export const SCHEDULER_LOCK_KEY = 0x4c4d_5431;
 export const DUEL_RECOVERY_LOCK_KEY = 0x4c4d_5432;
+export const RAID_RECOVERY_LOCK_KEY = 0x4c4d_5433;

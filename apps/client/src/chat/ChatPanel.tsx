@@ -9,6 +9,8 @@ import {
   type DuelCardDto,
 } from '@lethalmagotchi/shared';
 import { useDuel } from '../duel/DuelProvider.js';
+import { DonateDialog } from '../raid/DonateDialog.js';
+import { useRaid } from '../raid/RaidProvider.js';
 import { announcementMatches, useAnnouncer } from '../routes/pet/hooks.js';
 import { useSession } from '../session/SessionProvider.js';
 import { useChat } from './ChatProvider.js';
@@ -52,6 +54,12 @@ function DuelStanding({ card, now }: { card: DuelCardDto; now: number }) {
       <span className="chat-duel-record" aria-label={`${card.duelWins} duel wins, ${card.duelLosses} losses`}>
         {card.duelWins}W · {card.duelLosses}L
       </span>
+      {/* A plain state, not a punishment: it appears at zero coins and lifts on the first one. */}
+      {card.isBeggar && (
+        <span className="beggar-badge" title="Has nothing right now">
+          beggar
+        </span>
+      )}
       {chicken && (
         <span className="duel-chicken" title="Turned down a duel in the last day">
           chicken
@@ -64,7 +72,10 @@ function DuelStanding({ card, now }: { card: DuelCardDto; now: number }) {
 export function ChatPanel() {
   const chat = useChat();
   const duel = useDuel();
-  const { account } = useSession();
+  const raid = useRaid();
+  const { account, character } = useSession();
+  const myCharacterId = character?.id ?? null;
+  const [donating, setDonating] = useState<DuelCardDto | null>(null);
   const myAccountId = account?.id ?? null;
   const { message: announcement, announce } = useAnnouncer();
   const [view, setView] = useState<'global' | 'direct'>('global');
@@ -329,6 +340,45 @@ export function ChatPanel() {
                                   Duel
                                 </button>
                               )}
+                              {/* One affordance, two meanings: with a party already
+                                  assembling it is how the initiator fills it. */}
+                              {raid?.party && raid.party.initiatorCharacterId === myCharacterId
+                                ? !raid.party.members.some(
+                                    (member) => member.characterId === card.characterId,
+                                  ) &&
+                                  card.characterId !== raid.party.target.characterId && (
+                                    <button
+                                      type="button"
+                                      className="chat-raid"
+                                      aria-label={`Invite ${message.authorName}`}
+                                      onClick={() => raid.invite(card.characterId)}
+                                    >
+                                      Invite
+                                    </button>
+                                  )
+                                : card.raidEligible &&
+                                  raid !== null && (
+                                    <button
+                                      type="button"
+                                      className="chat-raid"
+                                      aria-label={`Raid ${message.authorName}`}
+                                      onClick={() => raid.createRaid(card)}
+                                    >
+                                      Raid
+                                    </button>
+                                  )}
+                              {/* Absent, never disabled, for anyone who is not currently a
+                                  beggar — the same rule the admin panel established. */}
+                              {card.isBeggar && (
+                                <button
+                                  type="button"
+                                  className="chat-donate"
+                                  aria-label={`Donate to ${message.authorName}`}
+                                  onClick={() => setDonating(card)}
+                                >
+                                  Donate
+                                </button>
+                              )}
                             </>
                           );
                         })()}
@@ -376,6 +426,8 @@ export function ChatPanel() {
           </form>
         </section>
       )}
+
+      {donating && <DonateDialog card={donating} onClose={() => setDonating(null)} />}
 
       {/* The region holds the newest message only while the announcer's throttled copy is
           still that message. Anything else — a blocked author's line the announcer has not

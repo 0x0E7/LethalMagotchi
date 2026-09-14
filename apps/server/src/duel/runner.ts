@@ -2,7 +2,9 @@ import { createHash, randomInt } from 'node:crypto';
 import {
   DUEL_THROWS,
   DUEL_WINS_NEEDED,
+  isBeggar,
   resolveRound,
+  wealthBandOf,
   type DuelPlayerView,
   type DuelScore,
   type DuelSide,
@@ -201,8 +203,10 @@ export class DuelRunner {
       accountId: duelist.accountId,
       nickname: duelist.nickname,
       speciesId: duelist.speciesId,
-      // The snapshot, not a live read: what is at stake was fixed when the duel started.
-      lethalCoins: duelist.potCoins,
+      // Banded, like every other public view of a wallet: the stake is the only exact
+      // figure a duel puts on the wire, and it travels on its own field.
+      wealthBand: wealthBandOf(duelist.potCoins),
+      isBeggar: isBeggar(duelist.potCoins),
       duelWins: duelist.duelWins,
       duelLosses: duelist.duelLosses,
     };

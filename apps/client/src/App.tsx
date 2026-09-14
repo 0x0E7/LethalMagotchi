@@ -3,6 +3,8 @@ import { useEffect } from 'react';
 import type { CharacterDto } from '@lethalmagotchi/shared';
 import { DuelArena } from './duel/DuelArena.js';
 import { useDuel } from './duel/DuelProvider.js';
+import { RaidArena } from './raid/RaidArena.js';
+import { useRaid } from './raid/RaidProvider.js';
 import { useSession } from './session/SessionProvider.js';
 import { useTournament } from './tournament/TournamentProvider.js';
 import { AuthScreen } from './routes/AuthScreen.js';
@@ -25,6 +27,12 @@ function DuelRoute({ character }: { character: CharacterDto }) {
   return <DuelArena match={duel.match} character={character} />;
 }
 
+function RaidRoute({ character }: { character: CharacterDto }) {
+  const raid = useRaid();
+  if (!raid?.match) return <Navigate to="/pet" replace />;
+  return <RaidArena match={raid.match} character={character} />;
+}
+
 function PokerRoute() {
   const { table } = useTournament();
   if (!table) return <Navigate to="/pet" replace />;
@@ -39,7 +47,9 @@ function PokerRoute() {
 function useSeatRouting(): void {
   const { table } = useTournament();
   const duel = useDuel();
+  const raid = useRaid();
   const match = duel?.match ?? null;
+  const raidMatch = raid?.match ?? null;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -48,7 +58,9 @@ function useSeatRouting(): void {
     if (!table && location.pathname === '/poker') navigate('/pet', { replace: true });
     if (match && location.pathname !== '/duel') navigate('/duel', { replace: true });
     if (!match && location.pathname === '/duel') navigate('/pet', { replace: true });
-  }, [table, match, location.pathname, navigate]);
+    if (raidMatch && location.pathname !== '/raid') navigate('/raid', { replace: true });
+    if (!raidMatch && location.pathname === '/raid') navigate('/pet', { replace: true });
+  }, [table, match, raidMatch, location.pathname, navigate]);
 }
 
 export function App() {
@@ -92,6 +104,10 @@ export function App() {
       <Route
         path="/duel"
         element={character ? <DuelRoute character={character} /> : <Navigate to="/create/species" replace />}
+      />
+      <Route
+        path="/raid"
+        element={character ? <RaidRoute character={character} /> : <Navigate to="/create/species" replace />}
       />
       <Route path="*" element={<Navigate to={character ? '/pet' : '/create/species'} replace />} />
     </Routes>
