@@ -133,6 +133,14 @@ function e2eLimiters(): Limiters {
     donation: new RateLimiter({ limit: 10, windowMs: 60 * 60_000, maxBackoffMs: 60 * 60_000 }),
     // Deliberately generous in e2e: one spec posts an appeal, and the 3h production cooldown
     // is keyed per character, which a re-run inside three hours would trip on a fixture.
+    // Both keyed per account, and every spec brings fresh ones, so these stay at production.
+    groupCreate: new RateLimiter({ limit: 3, windowMs: 60 * 60_000 }),
+    groupInvite: new RateLimiter({
+      limit: 20,
+      windowMs: 60 * 60_000,
+      maxBackoffMs: 60 * 60_000,
+      strikeDecayMs: 30 * 60_000,
+    }),
   };
 }
 

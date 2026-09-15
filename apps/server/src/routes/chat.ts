@@ -17,11 +17,11 @@ import {
   deleteBlock,
   ensureDmChannel,
   findDmChannelByKey,
-  findDmChannelDto,
+  findMemberChannelDto,
   findTownSquare,
   insertBlock,
   isBlockedEitherWay,
-  listDmChannelsForAccount,
+  listMemberChannelsForAccount,
   listMessages,
   toChannelDto,
   toMessageDto,
@@ -45,11 +45,13 @@ export async function registerChatRoutes(app: FastifyInstance, deps: ServerDeps)
     await requireCharacter(request.accountId);
 
     const townSquare = await findTownSquare(db);
-    const dms = await listDmChannelsForAccount(db, request.accountId);
+    // DMs and the caller's group channel, which are the same projection over the same member
+    // rows — a group channel is not a special case of anything on this path.
+    const mine = await listMemberChannelsForAccount(db, request.accountId);
     const payload: ChatChannelsResponse = {
       // The Town Square keeps no member rows, so it has no stored read watermark and its
       // unread badge is a client-session concern rather than a server one.
-      channels: [toChannelDto(townSquare), ...dms],
+      channels: [toChannelDto(townSquare), ...mine],
     };
     return reply.code(200).send(payload);
   });
@@ -88,13 +90,13 @@ export async function registerChatRoutes(app: FastifyInstance, deps: ServerDeps)
     }
 
     const { channel, created } = await ensureDmChannel(db, accountId, targetAccountId);
-    const mine = await findDmChannelDto(db, channel.id, accountId);
+    const mine = await findMemberChannelDto(db, channel.id, accountId);
     if (!mine) throw new ApiError(500, 'INTERNAL_ERROR', 'Could not open that conversation.');
 
     if (created) {
       // Each side is told about the channel as *they* see it — the label a DM carries is
       // the other participant, so the two views are not the same object.
-      const theirs = await findDmChannelDto(db, channel.id, targetAccountId);
+      const theirs = await findMemberChannelDto(db, channel.id, targetAccountId);
       const views = new Map([[accountId, mine]]);
       if (theirs) views.set(targetAccountId, theirs);
       chat.announceChannel([...views.keys()], (viewer) => views.get(viewer)!);

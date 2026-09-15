@@ -13,6 +13,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerDonationRoutes } from './routes/donations.js';
 import { registerDuelRoutes } from './routes/duels.js';
+import { registerGroupRoutes } from './routes/groups.js';
 import { registerCharacterRoutes } from './routes/characters.js';
 import { registerReferenceRoutes } from './routes/reference.js';
 import { registerTournamentRoutes } from './routes/tournaments.js';
@@ -113,6 +114,7 @@ export async function buildApp(deps: ServerDeps): Promise<FastifyInstance> {
   await registerTournamentRoutes(app, deps);
   await registerChatRoutes(app, deps);
   await registerDuelRoutes(app, deps);
+  await registerGroupRoutes(app, deps);
   await registerDonationRoutes(app, deps);
 
   if (serveSpa) {

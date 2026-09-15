@@ -208,6 +208,17 @@ export class ChatService {
   }
 
   /**
+   * The same thing for a channel that is *not* the whole server: a roster event in a group.
+   * It deliberately goes through the member fan-out rather than `broadcastSystemMessage`,
+   * which reaches every connected player and would carry a private room's line to strangers.
+   */
+  async deliverSystemMessage(channelId: string, row: MessageRow): Promise<void> {
+    const message: ServerMessage = { type: 'chat:message', channelId, message: toMessageDto(row) };
+    // A system row has no author account, so no member is excluded as its writer.
+    await this.fanOutDirect(channelId, message, '');
+  }
+
+  /**
    * Recipients are every player currently connected, minus whoever has blocked the author.
    * There is no client-supplied list anywhere in this path.
    */

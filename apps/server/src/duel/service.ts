@@ -34,6 +34,7 @@ import {
   type CharacterRow,
 } from '../repos/characters.js';
 import { findSystemMessage, insertSystemMessage, isBlockedEitherWay } from '../repos/chat.js';
+import { groupNamesForAccounts } from '../repos/groups.js';
 import {
   abortAbandonedDuels,
   abortDuel,
@@ -537,13 +538,24 @@ export class DuelService {
          * 60s TTL lapsed. The target's card is what lets the client rebuild the whole card.
          */
         const target = await findCharacterById(this.db, invite.to_character_id);
+        const groups = target?.account_id
+          ? await groupNamesForAccounts(this.db, [target.account_id])
+          : null;
         this.hub.sendToCharacter(characterId, {
           type: 'duel:invite_state',
           inviteId: invite.id,
           state: 'pending',
           expiresAt: invite.expires_at.toISOString(),
           stakeCoins: invite.stake_coins,
-          ...(target && !target.deleted_at ? { target: toDuelCardDto(target, now) } : {}),
+          ...(target && !target.deleted_at
+            ? {
+                target: toDuelCardDto(
+                  target,
+                  now,
+                  target.account_id ? (groups?.get(target.account_id) ?? null) : null,
+                ),
+              }
+            : {}),
         });
         continue;
       }

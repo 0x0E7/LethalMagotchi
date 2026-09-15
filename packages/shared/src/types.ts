@@ -141,6 +141,18 @@ export const API_ERROR_CODES = [
   'NOT_A_BEGGAR',
   'SELF_DONATION',
   'BLOCKED',
+  /** One group at a time — the partial unique index refusing a second live membership. */
+  'GROUP_MEMBERSHIP_EXISTS',
+  'GROUP_NOT_MEMBER',
+  'GROUP_NOT_LEADER',
+  'GROUP_FULL',
+  'GROUP_NAME_TAKEN',
+  'GROUP_NAME_REJECTED',
+  'GROUP_INVITE_PENDING',
+  /** A kicked player, still inside the 24h block their old group put them under. */
+  'GROUP_KICK_COOLDOWN',
+  'GROUP_CREATE_COOLDOWN',
+  'GROUP_TOO_NEW',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;

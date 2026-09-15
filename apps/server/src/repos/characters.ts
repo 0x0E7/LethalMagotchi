@@ -116,7 +116,11 @@ export function toCharacterDto(row: CharacterRow, now: number = Date.now()): Cha
  * targets off this card, and an exact number would make a raid a calculated certainty
  * rather than a risk.
  */
-export function toDuelCardDto(row: CharacterRow, now: number = Date.now()): DuelCardDto {
+export function toDuelCardDto(
+  row: CharacterRow,
+  now: number = Date.now(),
+  groupName: string | null = null,
+): DuelCardDto {
   return {
     characterId: row.id,
     accountId: row.account_id,
@@ -127,6 +131,7 @@ export function toDuelCardDto(row: CharacterRow, now: number = Date.now()): Duel
     duelWins: row.duel_wins,
     duelLosses: row.duel_losses,
     chickenBadgeUntil: row.chicken_badge_until ? row.chicken_badge_until.toISOString() : null,
+    groupName,
     duelEligible: isOldEnoughToDuel(row.created_at, now) && !isEngaged(row),
     /**
      * The target's own floors, so the UI never offers a raid that must fail. The engagement

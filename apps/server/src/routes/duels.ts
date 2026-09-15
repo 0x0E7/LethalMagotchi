@@ -4,6 +4,7 @@ import { type DuelCardsResponse } from '@lethalmagotchi/shared';
 import type { ServerDeps } from '../deps.js';
 import { ApiError } from '../errors.js';
 import { findActiveCharacterByAccount, toDuelCardDto, type CharacterRow } from '../repos/characters.js';
+import { groupNamesForAccounts } from '../repos/groups.js';
 import { parseOrThrow } from '../validate.js';
 
 /** Enough for a screenful of Town Square authors, and bounded so it cannot be a scrape. */
@@ -36,8 +37,19 @@ export async function registerDuelRoutes(app: FastifyInstance, deps: ServerDeps)
       [characterIds],
     );
 
+    // One lookup for the whole page rather than a per-card join: the group badge rides this
+    // card precisely so the Town Square needs no second fetch to render it.
+    const groups = await groupNamesForAccounts(
+      db,
+      result.rows.map((row) => row.account_id).filter((id): id is string => id !== null),
+    );
+
     const now = Date.now();
-    const payload: DuelCardsResponse = { cards: result.rows.map((row) => toDuelCardDto(row, now)) };
+    const payload: DuelCardsResponse = {
+      cards: result.rows.map((row) =>
+        toDuelCardDto(row, now, row.account_id ? (groups.get(row.account_id) ?? null) : null),
+      ),
+    };
     return reply.code(200).send(payload);
   });
 }

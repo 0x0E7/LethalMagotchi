@@ -27,6 +27,8 @@ export interface Limiters {
   raidAction: RateLimiter;
   raidResync: RateLimiter;
   donation: RateLimiter;
+  groupCreate: RateLimiter;
+  groupInvite: RateLimiter;
 }
 
 export interface ServerDeps {
@@ -142,5 +144,16 @@ export function createLimiters(now?: () => number): Limiters {
     // A donation moves real coins, and a rescued beggar stops being eligible immediately, so
     // an honest donor needs very few of these.
     donation: limiter({ limit: 10, windowMs: 60 * 60_000, maxBackoffMs: 60 * 60_000 }),
+    // The 24h create cooldown is the real bound on founding groups — this is only here so a
+    // script cannot burn through names faster than a person could type them.
+    groupCreate: limiter({ limit: 3, windowMs: 60 * 60_000 }),
+    // Any member may invite, so this is the one spam surface groups add: an invitation is a
+    // notification a stranger can put in front of you, and it sits there for a week.
+    groupInvite: limiter({
+      limit: 20,
+      windowMs: 60 * 60_000,
+      maxBackoffMs: 60 * 60_000,
+      strikeDecayMs: 30 * 60_000,
+    }),
   };
 }

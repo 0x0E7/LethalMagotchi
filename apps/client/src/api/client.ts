@@ -11,6 +11,8 @@ import type {
   AppealResponse,
   DonationResponse,
   DuelCardsResponse,
+  GroupResponse,
+  MyGroupResponse,
   MeResponse,
   ShopItemId,
   ReferenceResponse,
@@ -226,6 +228,37 @@ export const api = {
 
   postAppeal(): Promise<AppealResponse> {
     return request<AppealResponse>('/appeals', { method: 'POST', body: {} });
+  },
+
+  myGroup(): Promise<MyGroupResponse> {
+    return request<MyGroupResponse>('/groups/me');
+  },
+
+  groupRoster(groupId: string): Promise<GroupResponse> {
+    return request<GroupResponse>(`/groups/${groupId}`);
+  },
+
+  createGroup(name: string): Promise<MyGroupResponse> {
+    return request<MyGroupResponse>('/groups', { method: 'POST', body: { name } });
+  },
+
+  inviteToGroup(groupId: string, toAccountId: string): Promise<void> {
+    return request<void>(`/groups/${groupId}/invites`, { method: 'POST', body: { toAccountId } });
+  },
+
+  respondToGroupInvite(inviteId: string, accept: boolean): Promise<MyGroupResponse> {
+    return request<MyGroupResponse>(`/groups/invites/${inviteId}/respond`, {
+      method: 'POST',
+      body: { accept },
+    });
+  },
+
+  leaveGroup(): Promise<MyGroupResponse> {
+    return request<MyGroupResponse>('/groups/me/membership', { method: 'DELETE' });
+  },
+
+  removeFromGroup(groupId: string, accountId: string): Promise<MyGroupResponse> {
+    return request<MyGroupResponse>(`/groups/${groupId}/members/${accountId}`, { method: 'DELETE' });
   },
 
   blockPlayer(blockedAccountId: string): Promise<void> {

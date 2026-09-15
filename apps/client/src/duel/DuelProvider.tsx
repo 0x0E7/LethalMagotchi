@@ -23,6 +23,8 @@ interface DuelValue {
   note: string | null;
   cards: Record<string, DuelCardDto>;
   ensureCards: (characterIds: string[]) => void;
+  /** Re-reads cards whose contents a change outside duels has just invalidated. */
+  refetchCards: (characterIds: string[]) => void;
   openStakes: (target: DuelCardDto) => void;
   closeStakes: () => void;
   sendInvite: () => void;
@@ -66,6 +68,22 @@ export function DuelProvider({ children }: { children: ReactNode }) {
       if (missing.length === 0) return;
       for (const id of missing) requested.current.add(id);
       void fetchCards(missing);
+    },
+    [fetchCards],
+  );
+
+  /**
+   * The card carries a player's group as well as their duel standing, and a group changes
+   * without any duel frame to notice it by — so the one client that knows a roster just moved
+   * says so here rather than waiting for a reload.
+   */
+  const refetchCards = useCallback(
+    (characterIds: string[]) => {
+      const ids = [...new Set(characterIds.filter(Boolean))];
+      if (ids.length === 0) return;
+      void fetchCards(ids).then(() => {
+        for (const id of ids) requested.current.add(id);
+      });
     },
     [fetchCards],
   );
@@ -154,6 +172,7 @@ export function DuelProvider({ children }: { children: ReactNode }) {
       note: state.note,
       cards: state.cards,
       ensureCards,
+      refetchCards,
       openStakes,
       closeStakes,
       sendInvite,
@@ -163,7 +182,17 @@ export function DuelProvider({ children }: { children: ReactNode }) {
       dismissMatch: () => dispatch({ type: 'dismissMatch' }),
       dismissNote: () => dispatch({ type: 'note', note: null }),
     }),
-    [state, ensureCards, openStakes, closeStakes, sendInvite, cancelInvite, respond, throwHand],
+    [
+      state,
+      ensureCards,
+      refetchCards,
+      openStakes,
+      closeStakes,
+      sendInvite,
+      cancelInvite,
+      respond,
+      throwHand,
+    ],
   );
 
   if (!enabled) return <>{children}</>;
