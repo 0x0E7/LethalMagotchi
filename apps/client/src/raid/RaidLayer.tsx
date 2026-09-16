@@ -8,6 +8,8 @@ import {
 import { api } from '../api/client.js';
 import { useHoldToConfirm } from '../duel/useHoldToConfirm.js';
 import { useNow } from '../routes/pet/hooks.js';
+import { PeoplePicker } from '../chat/PeoplePicker.js';
+import { wealthBand } from './RaidFinder.js';
 import { useRaid } from './RaidProvider.js';
 import { aftermathCoinLine, aftermathHeadline } from './state.js';
 
@@ -23,7 +25,7 @@ export function RaidLayer({ character }: { character: CharacterDto }) {
 
   if (raid.aftermath) return <AftermathCard character={character} />;
   if (raid.incoming) return <InviteCard character={character} />;
-  if (raid.party && raid.partyHidden) return <PartyChip />;
+  if (raid.party && raid.partyHidden) return <PartyChip character={character} />;
   if (raid.party) return <PartyCard character={character} />;
   if (raid.cancelled) return <CancelledCard />;
   return null;
@@ -33,14 +35,53 @@ export function RaidLayer({ character }: { character: CharacterDto }) {
  * What is left of the party card while the initiator is out in the Town Square picking
  * people. The raid is still assembling behind it; this is only where it went.
  */
-function PartyChip() {
+function PartyChip({ character }: { character: CharacterDto }) {
   const raid = useRaid()!;
-  const joined = raid.party!.members.filter((member) => member.state === 'joined').length;
+  const party = raid.party!;
+  const joined = party.members.filter((member) => member.state === 'joined').length;
+  const claimed = party.members.filter(
+    (member) => member.state === 'invited' || member.state === 'joined',
+  ).length;
+
   return (
     <div className="raid-chip">
       <button type="button" className="ghost small" onClick={raid.showParty}>
-        Raid on {raid.party!.target.nickname} — {joined} in
+        Raid on {party.target.nickname} — {joined} in
       </button>
+
+      {/* Recruiting lives in the collapsed state, not on the party card.
+          On the card it sat above the hold-to-confirm button and loaded asynchronously, so
+          "Fire the raid" moved under the player's finger mid-hold — which is the last
+          control in the game that should shift while being pressed.
+          Before this, "Find raiders" only hid the card and left you to hope the person you
+          wanted had just posted in the Town Square. */}
+      {party.initiatorCharacterId === character.id && party.state === 'assembling' && (
+        <section className="raid-recruit" aria-labelledby="raid-recruit-heading">
+          <h3 id="raid-recruit-heading" className="group-heading">
+            Bring someone along
+          </h3>
+          <PeoplePicker
+            emptyLabel="Nobody else is here to bring."
+            meta={wealthBand}
+            actions={[
+              {
+                label: 'Invite',
+                onPick: (card) => raid.invite(card.characterId),
+                unavailable: (card) =>
+                  card.characterId === party.target.characterId
+                    ? 'The target'
+                    : party.members.some((member) => member.characterId === card.characterId)
+                      ? 'Already in'
+                      : // Counted the way the server counts it: an outstanding invitation
+                        // holds a seat, so offering a fourth would only earn a PARTY_FULL.
+                        claimed >= RAID_MAX_RAIDERS
+                        ? 'Party full'
+                        : null,
+              },
+            ]}
+          />
+        </section>
+      )}
     </div>
   );
 }
@@ -175,10 +216,7 @@ function PartyCard({ character }: { character: CharacterDto }) {
         Wallets are read and held the moment it is locked in.
       </p>
       {youAreInitiator && party.state === 'assembling' && (
-        <p className="muted small">
-          Invite people from the Town Square — their row carries the invite while this raid is
-          assembling.
-        </p>
+        <p className="muted small">Use “Find raiders” below to bring people in.</p>
       )}
 
       {secondsLeft !== null && (

@@ -155,6 +155,14 @@ export function toDuelCardDto(
       isOldEnoughToRaid(row.created_at, now) &&
       isRaidableWealth(row.lethal_coins) &&
       !isRaidImmune(row.raid_immunity_until, now),
+    /** Same order as the duel reasons: longest wait first, so the honest one is reported. */
+    raidBlockedReason: !isOldEnoughToRaid(row.created_at, now)
+      ? 'too_new'
+      : isRaidImmune(row.raid_immunity_until, now)
+        ? 'immune'
+        : !isRaidableWealth(row.lethal_coins)
+          ? 'too_poor'
+          : null,
   };
 }
 

@@ -17,6 +17,8 @@ import { ChatPanel } from '../../chat/ChatPanel.js';
 import { DuelFinder } from '../../duel/DuelFinder.js';
 import { DuelLayer } from '../../duel/DuelLayer.js';
 import { BeggarStrip } from '../../raid/BeggarStrip.js';
+import { RaidFinder } from '../../raid/RaidFinder.js';
+import { useRaid } from '../../raid/RaidProvider.js';
 import { RaidLayer } from '../../raid/RaidLayer.js';
 import { useReference } from '../../hooks/useReference.js';
 import { useSession } from '../../session/SessionProvider.js';
@@ -64,6 +66,7 @@ function errorMessage(error: unknown): string {
 export function PetScreen({ character }: { character: CharacterDto }) {
   const { account, logout, setCharacter } = useSession();
   const { outcome, rebirth, entryNotice, dismissEntryNotice } = useTournament();
+  const raid = useRaid();
   const { data: reference } = useReference();
   const location = useLocation();
   const [animationMode, setAnimationMode] = useAnimationMode();
@@ -71,6 +74,7 @@ export function PetScreen({ character }: { character: CharacterDto }) {
   const { message, announce } = useAnnouncer();
   const [note, setNote] = useState<string | null>(null);
   const [finding, setFinding] = useState(false);
+  const [raiding, setRaiding] = useState(false);
 
   const now = useNow(TICK_MS);
   const stats = useLiveStats(character, now);
@@ -160,6 +164,19 @@ export function PetScreen({ character }: { character: CharacterDto }) {
             <span aria-hidden="true">⚔️</span> Duel
           </button>
 
+          {/* Same gap, same fix: a raid could only be aimed at someone who had just posted
+              in the Town Square, which made the mode invisible to anyone not reading chat. */}
+          <button
+            type="button"
+            className="ghost small raid-open"
+            aria-label="Find a raid"
+            // With a party already assembling the card is the surface, not the finder —
+            // bring it back rather than opening a second way to start a raid.
+            onClick={() => (raid?.party ? raid.showParty() : setRaiding(true))}
+          >
+            <span aria-hidden="true">🎭</span> Raid
+          </button>
+
           <span
             className={character.lethalCoins <= 2 ? 'coin-chip low' : 'coin-chip'}
             aria-label={`${character.lethalCoins} LethalCoins`}
@@ -236,6 +253,7 @@ export function PetScreen({ character }: { character: CharacterDto }) {
       <ChatPanel />
       {/* Closed the moment a Stakes Card opens, so the two never stack. */}
       {finding && <DuelFinder onClose={() => setFinding(false)} />}
+      {raiding && !raid?.party && <RaidFinder onClose={() => setRaiding(false)} />}
       <DuelLayer character={character} />
       <RaidLayer character={character} />
 

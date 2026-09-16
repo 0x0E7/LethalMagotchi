@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { authorBadge, type DuelCardDto } from '@lethalmagotchi/shared';
 import { api } from '../api/client.js';
 
@@ -22,6 +22,14 @@ export interface PickerAction {
 
 interface Props {
   actions: PickerAction[];
+  /**
+   * Extra identity rendered beside the name. The raid finder uses it for the wealth band,
+   * which is the whole basis of picking a target — and is deliberately a band, never a
+   * number, so a raid stays a risk rather than an arithmetic certainty.
+   */
+  meta?: (card: DuelCardDto) => ReactNode;
+  /** Replaces "Nobody else is here right now" where an empty list means something else. */
+  emptyLabel?: string;
 }
 
 /**
@@ -34,7 +42,7 @@ interface Props {
  * Empty search means "who is online now", which is the useful default: the people worth
  * messaging are usually the ones here. Typing searches every player by nickname instead.
  */
-export function PeoplePicker({ actions }: Props) {
+export function PeoplePicker({ actions, meta, emptyLabel }: Props) {
   const [term, setTerm] = useState('');
   const [cards, setCards] = useState<DuelCardDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +95,7 @@ export function PeoplePicker({ actions }: Props) {
         <p className="muted small">Looking…</p>
       ) : cards.length === 0 ? (
         <p className="muted small">
-          {term.trim().length > 0 ? 'Nobody by that name.' : 'Nobody else is here right now.'}
+          {term.trim().length > 0 ? 'Nobody by that name.' : (emptyLabel ?? 'Nobody else is here right now.')}
         </p>
       ) : (
         <ul className="people-list" aria-label="Players">
@@ -103,6 +111,7 @@ export function PeoplePicker({ actions }: Props) {
                     <span className="sr-only">identity tag </span>#{badge.tag}
                   </span>
                   {card.groupName && <span className="people-group">{card.groupName}</span>}
+                  {meta?.(card)}
                 </span>
                 <span className="people-actions">
                   {actions.map((action) => {
