@@ -243,6 +243,41 @@ describe('the directory card', () => {
     expect(card?.duelBlockedReason).toBe('offline');
   });
 
+  it('says why a raid is refused, not merely that it is', async () => {
+    const viewer = await makePlayer('Raider');
+    const target = await makePlayer('Mark');
+    online(target);
+
+    const read = async () => {
+      const response = await app.inject(
+        authed(viewer, { method: 'GET', url: `/api/v1/players?q=${encodeURIComponent(target.nickname)}` }),
+      );
+      return (
+        response.json() as { cards: { raidEligible: boolean; raidBlockedReason: string | null }[] }
+      ).cards[0]!;
+    };
+
+    // Characters start at 5 coins, which clears the `broke` floor, so an aged target is
+    // raidable on its own merits.
+    expect(await read()).toMatchObject({ raidEligible: true, raidBlockedReason: null });
+
+    // Nothing worth taking. A raid on an empty wallet is griefing with no economic content,
+    // and this is also what shields a beggar from being farmed through repeat bankruptcy.
+    await db.query('UPDATE characters SET lethal_coins = 0 WHERE id = $1', [target.characterId]);
+    expect(await read()).toMatchObject({ raidEligible: false, raidBlockedReason: 'too_poor' });
+
+    // Immunity outranks poverty: they were just robbed, which is why they have nothing.
+    await db.query(
+      `UPDATE characters SET raid_immunity_until = now() + interval '12 hours' WHERE id = $1`,
+      [target.characterId],
+    );
+    expect(await read()).toMatchObject({ raidEligible: false, raidBlockedReason: 'immune' });
+
+    // And the age floor outranks both — the longest wait is the honest one to report.
+    await db.query('UPDATE characters SET created_at = now() WHERE id = $1', [target.characterId]);
+    expect(await read()).toMatchObject({ raidEligible: false, raidBlockedReason: 'too_new' });
+  });
+
   it('reports a present player as eligible', async () => {
     const viewer = await makePlayer('Looker');
     const here = await makePlayer('Here');

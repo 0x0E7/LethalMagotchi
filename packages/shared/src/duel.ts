@@ -130,8 +130,15 @@ export interface DuelCardDto {
    * waiting for instead of simply not being there, which reads as the feature missing.
    */
   duelBlockedReason: 'too_new' | 'offline' | 'busy' | null;
-  /** The same read for raids: age floor, engagement lock, immunity and the wealth floor. */
+  /** The same read for raids: age floor, immunity and the wealth floor. */
   raidEligible: boolean;
+  /**
+   * Why not, when `raidEligible` is false — the same job `duelBlockedReason` does, and for
+   * the same reason: a missing Raid button is indistinguishable from there being no way to
+   * raid at all. Nothing private; every value here is already implied by the boolean and the
+   * wealth band beside it.
+   */
+  raidBlockedReason: 'too_new' | 'immune' | 'too_poor' | null;
 }
 
 export interface DuelCardsResponse {

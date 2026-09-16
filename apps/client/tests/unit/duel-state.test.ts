@@ -36,6 +36,7 @@ const card: DuelCardDto = {
   duelEligible: true,
   duelBlockedReason: null,
   raidEligible: true,
+  raidBlockedReason: null,
 };
 
 /** A fixed "now", so a frame's deadline is in the past or the future by construction. */
