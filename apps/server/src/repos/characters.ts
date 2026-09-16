@@ -120,7 +120,15 @@ export function toDuelCardDto(
   row: CharacterRow,
   now: number = Date.now(),
   groupName: string | null = null,
+  /**
+   * Whether they are at the keyboard. Defaults to true for the callers that already know the
+   * answer — a duel in progress has two live sockets by construction — and is read from the
+   * hub wherever a card is handed to a player deciding who to challenge.
+   */
+  online = true,
 ): DuelCardDto {
+  const tooNew = !isOldEnoughToDuel(row.created_at, now);
+  const engaged = isEngaged(row);
   return {
     characterId: row.id,
     accountId: row.account_id,
@@ -132,7 +140,13 @@ export function toDuelCardDto(
     duelLosses: row.duel_losses,
     chickenBadgeUntil: row.chicken_badge_until ? row.chicken_badge_until.toISOString() : null,
     groupName,
-    duelEligible: isOldEnoughToDuel(row.created_at, now) && !isEngaged(row),
+    duelEligible: !tooNew && !engaged && online,
+    /**
+     * Ordered by how long the player would be waiting, longest first. A pet that is both too
+     * new *and* busy is old enough long before the day is out, and someone who is offline is
+     * not meaningfully "busy" from the asker's side — they are simply not here.
+     */
+    duelBlockedReason: tooNew ? 'too_new' : !online ? 'offline' : engaged ? 'busy' : null,
     /**
      * The target's own floors, so the UI never offers a raid that must fail. The engagement
      * lock is deliberately *not* part of it: a target does not have to be idle to be raided.

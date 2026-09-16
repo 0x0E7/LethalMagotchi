@@ -117,14 +117,38 @@ export interface DuelCardDto {
   chickenBadgeUntil: string | null;
   /** The group this player belongs to, rendered in the same identity slot as the badges. */
   groupName: string | null;
-  /** Server's own read of the 24h account-age floor, so the UI never offers an invite that must fail. */
+  /**
+   * The server's own read of every floor an invite must clear: the 24h character-age floor,
+   * the engagement lock, and being at the keyboard — an invite expires in a minute, so the
+   * server refuses one to an absent target and a card that ignored that would offer duels
+   * that must fail.
+   */
   duelEligible: boolean;
+  /**
+   * Why not, when `duelEligible` is false. Nothing private: all three facts are already
+   * inferable from the boolean beside it. It exists so a dead Duel button can say what it is
+   * waiting for instead of simply not being there, which reads as the feature missing.
+   */
+  duelBlockedReason: 'too_new' | 'offline' | 'busy' | null;
   /** The same read for raids: age floor, engagement lock, immunity and the wealth floor. */
   raidEligible: boolean;
 }
 
 export interface DuelCardsResponse {
   cards: DuelCardDto[];
+}
+
+/**
+ * One opponent the server has already checked against every floor an invite must clear —
+ * including the two a card cannot express (a block in either direction, and the per-pair
+ * decline cooldown), which are relationships between the asker and the answer rather than
+ * properties of either.
+ *
+ * `null` means nobody qualifies right now, which is an ordinary answer on a quiet server and
+ * not an error.
+ */
+export interface RandomOpponentResponse {
+  card: DuelCardDto | null;
 }
 
 /* ------------------------------------------------------------------ *

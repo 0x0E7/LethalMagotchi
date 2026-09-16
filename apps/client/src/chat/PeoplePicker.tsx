@@ -5,13 +5,23 @@ import { api } from '../api/client.js';
 /** Long enough that typing a name is one request, short enough to feel immediate. */
 const SEARCH_DEBOUNCE_MS = 250;
 
-interface Props {
-  /** Verb on each row's button — "Message", "Add", and so on. */
-  actionLabel: string;
+export interface PickerAction {
+  /** Verb on the button — "Message", "Duel", "Add". */
+  label: string;
   onPick: (card: DuelCardDto) => void;
-  /** Rows that should render without an action, e.g. people already in the group. */
-  isPicked?: (card: DuelCardDto) => boolean;
-  pickedLabel?: string;
+  /**
+   * Why this action cannot be taken on this row, or null when it can.
+   *
+   * Returning a reason greys the button out and prints the reason beside it, rather than
+   * removing either. That is deliberate: a silently absent button is indistinguishable from
+   * a feature that does not exist, which is exactly how "there is no way to duel anyone"
+   * happens.
+   */
+  unavailable?: (card: DuelCardDto) => string | null;
+}
+
+interface Props {
+  actions: PickerAction[];
 }
 
 /**
@@ -24,7 +34,7 @@ interface Props {
  * Empty search means "who is online now", which is the useful default: the people worth
  * messaging are usually the ones here. Typing searches every player by nickname instead.
  */
-export function PeoplePicker({ actionLabel, onPick, isPicked, pickedLabel = 'Added' }: Props) {
+export function PeoplePicker({ actions }: Props) {
   const [term, setTerm] = useState('');
   const [cards, setCards] = useState<DuelCardDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +93,6 @@ export function PeoplePicker({ actionLabel, onPick, isPicked, pickedLabel = 'Add
         <ul className="people-list" aria-label="Players">
           {cards.map((card) => {
             const badge = authorBadge(card.accountId ?? card.characterId);
-            const picked = isPicked?.(card) ?? false;
             return (
               <li key={card.characterId} className="people-row">
                 <span className="people-name">
@@ -95,18 +104,36 @@ export function PeoplePicker({ actionLabel, onPick, isPicked, pickedLabel = 'Add
                   </span>
                   {card.groupName && <span className="people-group">{card.groupName}</span>}
                 </span>
-                {picked ? (
-                  <span className="muted small">{pickedLabel}</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="ghost small"
-                    aria-label={`${actionLabel} ${card.nickname}`}
-                    onClick={() => onPick(card)}
-                  >
-                    {actionLabel}
-                  </button>
-                )}
+                <span className="people-actions">
+                  {actions.map((action) => {
+                    const why = action.unavailable?.(card) ?? null;
+                    return (
+                      <span key={action.label} className="people-action">
+                        <button
+                          type="button"
+                          className="ghost small"
+                          disabled={why !== null}
+                          // The reason rides the label rather than only the text beside it,
+                          // so a screen reader hears why the button is dead instead of just
+                          // that it is.
+                          aria-label={
+                            why === null
+                              ? `${action.label} ${card.nickname}`
+                              : `${action.label} ${card.nickname} — unavailable: ${why}`
+                          }
+                          onClick={() => action.onPick(card)}
+                        >
+                          {action.label}
+                        </button>
+                        {why !== null && (
+                          <span className="muted small people-why" aria-hidden="true">
+                            {why}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </span>
               </li>
             );
           })}

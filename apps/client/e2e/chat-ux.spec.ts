@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { startAtPetScreen } from './helpers.js';
 
@@ -12,6 +13,22 @@ import { startAtPetScreen } from './helpers.js';
 
 function marker(label: string): string {
   return `${label}-${randomUUID().slice(0, 8)}`;
+}
+
+/** Duels read the pet's own age, not the account's, and a test cannot wait a day for it. */
+async function agePets(nicknames: string[]): Promise<void> {
+  const pool = new pg.Pool({
+    connectionString:
+      process.env.TEST_DATABASE_URL ?? 'postgresql://lethal:lethal@localhost:5432/lethalmagotchi_test',
+  });
+  try {
+    await pool.query(
+      `UPDATE characters SET created_at = now() - interval '48 hours' WHERE nickname = ANY($1::text[])`,
+      [nicknames],
+    );
+  } finally {
+    await pool.end();
+  }
 }
 
 async function openPlayer(browser: Browser, request: APIRequestContext, nickname: string): Promise<Page> {
@@ -91,6 +108,35 @@ test('a quiet player can be found by name and sent a direct message', async ({ b
   await expect(quiet.getByRole('log').getByText(hello)).toBeVisible({ timeout: 10_000 });
 
   await pigeon.close();
+  await quiet.close();
+});
+
+test('a quiet player can be challenged to a duel from the directory', async ({ browser, request }) => {
+  // The Duel button lived only beside a Town Square message, so you could not challenge
+  // anyone who had not just spoken — the same gap that made DMs and group invites
+  // unreachable. It belongs with them, on the player, not on the message.
+  const quietName = marker('Bystander');
+  const quiet = await openPlayer(browser, request, quietName);
+  const challenger = await openPlayer(browser, request, marker('Gauntlet'));
+
+  // Duels keep a 24h floor on the *character*, so a seconds-old fixture is refused on its
+  // own merits. Aged here to test the affordance rather than the floor.
+  await agePets([quietName]);
+
+  await challenger.getByRole('tab', { name: /Direct/ }).click();
+  await challenger.getByLabel('Search players by name').fill(quietName);
+
+  const duelButton = challenger.getByRole('button', { name: `Duel ${quietName}` });
+  await expect(duelButton).toBeVisible();
+  await duelButton.click();
+
+  // It opens the real Stakes Card — the same modal the Town Square button opens, naming
+  // what is at risk, rather than some directory-only shortcut.
+  const stakes = challenger.getByRole('dialog');
+  await expect(stakes).toBeVisible();
+  await expect(stakes).toContainText(`Challenge ${quietName} to a duel?`);
+
+  await challenger.close();
   await quiet.close();
 });
 

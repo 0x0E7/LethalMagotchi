@@ -2190,8 +2190,28 @@ button.chat-author {
   color: var(--ink-muted, inherit);
 }
 
-.people-row button {
+.people-actions {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* One button and, when it is dead, the reason beside it — kept together so a row with two
+   actions cannot interleave one action's button with the other's explanation. */
+.people-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.people-action button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.people-why {
+  white-space: nowrap;
 }
 
 /* The conversation list and the picker share one scroll area below the tab strip. */
@@ -2381,6 +2401,33 @@ button.chat-author {
   gap: 12px;
   margin-top: 18px;
   flex-wrap: wrap;
+}
+
+/* The finder: a way in at the top, a way to search underneath it. */
+.duel-finder-random {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.duel-finder-search {
+  margin-top: 14px;
+}
+
+/* Bounded so a long directory scrolls inside the card and Close stays where it was put,
+   rather than being pushed off the bottom of a short screen. */
+.duel-finder .people-list {
+  max-height: 34dvh;
+  overflow-y: auto;
+}
+
+@media (max-height: 560px) {
+  .duel-finder .people-list {
+    max-height: 26dvh;
+  }
 }
 
 .duel-hold {

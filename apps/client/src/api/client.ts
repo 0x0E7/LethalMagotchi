@@ -11,6 +11,7 @@ import type {
   AppealResponse,
   DonationResponse,
   DuelCardsResponse,
+  RandomOpponentResponse,
   GroupResponse,
   MyGroupResponse,
   MeResponse,
@@ -226,6 +227,11 @@ export const api = {
   players(q?: string): Promise<DuelCardsResponse> {
     const query = q && q.length > 0 ? `?q=${encodeURIComponent(q)}` : '';
     return request<DuelCardsResponse>(`/players${query}`);
+  },
+
+  /** Somebody, anybody — `card: null` when nobody challengeable is online. */
+  randomOpponent(): Promise<RandomOpponentResponse> {
+    return request<RandomOpponentResponse>('/duels/random');
   },
 
   donate(toCharacterId: string, coins: number): Promise<DonationResponse> {
