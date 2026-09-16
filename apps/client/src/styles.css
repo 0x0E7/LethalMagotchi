@@ -1857,6 +1857,13 @@ button.primary.danger {
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
+  /*
+   * The dock is anchored to the bottom and grows upward, with the toggle button sitting
+   * below the panel. Bounding the whole stack here — rather than trying to guess the
+   * panel's budget from the viewport — is what keeps the top of the panel on screen in a
+   * short window, whatever the chrome around it happens to measure.
+   */
+  max-height: calc(100dvh - 24px);
 }
 
 .chat-toggle {
@@ -1884,8 +1891,17 @@ button.primary.danger {
 
 .chat-panel {
   order: 1;
-  width: min(360px, calc(100vw - 36px));
-  height: min(460px, calc(100vh - 140px));
+  /*
+   * Wider than it was: at 360px the composer, its Send button and a message's identity
+   * badges were all competing for the same line. Still capped, so it stays a dock on a
+   * large monitor rather than stretching across it.
+   */
+  width: min(420px, calc(100vw - 36px));
+  /* A preferred height, not a fixed one: the dock's `max-height` shrinks it when a short
+     window leaves less room, and `min-height: 0` is what permits that shrink. */
+  height: min(560px, calc(100vh - 140px));
+  min-height: 0;
+  flex-shrink: 1;
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -2063,13 +2079,62 @@ button.chat-author {
 
 .chat-composer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--line);
 }
 
-.chat-composer input {
+/*
+ * Grows with the message rather than scrolling it sideways out of view. The height is set
+ * inline from `scrollHeight`; `max-height` is the ceiling, after which this scrolls.
+ */
+.chat-composer textarea {
   flex: 1;
+  min-width: 0;
+  font: inherit;
+  line-height: 1.4;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  resize: none;
+  overflow-y: auto;
+  max-height: 8.5rem;
+}
+
+.chat-composer textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chat-composer button.primary {
+  padding: 10px 16px;
+  flex: 0 0 auto;
+}
+
+.chat-remaining {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: right;
+}
+
+/* ---------------------------- people picker ---------------------------- */
+
+/*
+ * Finding a player. Until this existed the only way to reach someone was to catch them
+ * posting in the Town Square, which left direct messages and group invitations both
+ * unusable against anyone quiet. Shared by both, so neither grows its own half-directory.
+ */
+.people-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.people-search {
+  width: 100%;
   min-width: 0;
   font: inherit;
   padding: 10px 12px;
@@ -2079,18 +2144,139 @@ button.chat-author {
   color: var(--ink);
 }
 
-.chat-composer button.primary {
-  padding: 10px 16px;
+.people-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
+.people-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.people-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A comfortable touch target, not just a readable row. */
+  min-height: 44px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.people-row:last-child {
+  border-bottom: none;
+}
+
+.people-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.people-group {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-muted, inherit);
+}
+
+.people-row button {
+  flex: 0 0 auto;
+}
+
+/* The conversation list and the picker share one scroll area below the tab strip. */
+.chat-direct-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 12px 12px;
+}
+
+.chat-direct-list .chat-threads {
+  flex: none;
+  overflow: visible;
+  padding: 0 0 6px;
+}
+
+.chat-people {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* ------------------------- responsive: chat dock ------------------------ */
+
+/*
+ * Tablets and narrow desktop windows: keep the dock, give it the width it needs rather
+ * than the 360px it used to be pinned to.
+ */
+@media (max-width: 900px) {
+  .chat-panel {
+    width: min(400px, calc(100vw - 28px));
+  }
+}
+
+/*
+ * Phones: the floating dock becomes a sheet spanning the screen. A 420px card on a 390px
+ * phone is a card with nowhere to sit, and `dvh` keeps it clear of the browser chrome that
+ * `vh` ignores. Safe-area insets keep it off a notch or a home indicator.
+ */
 @media (max-width: 640px) {
   .chat-dock {
-    right: 10px;
-    bottom: 10px;
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    align-items: stretch;
   }
 
   .chat-panel {
-    height: min(70vh, calc(100vh - 120px));
+    width: auto;
+    height: min(78dvh, calc(100dvh - 96px));
+  }
+
+  /* Wrapping keeps three segments legible instead of squeezing them to initials. */
+  .chat-tabs .segment {
+    padding: 6px 8px;
+    font-size: 0.8125rem;
+  }
+
+  .people-list {
+    max-height: 12rem;
+  }
+
+  /* iOS zooms a focused field under 16px; matching it keeps the page from jumping. */
+  .chat-composer textarea,
+  .people-search,
+  .group-create input {
+    font-size: 16px;
+  }
+}
+
+/*
+ * Short windows — a laptop with devtools open, or a phone in landscape.
+ *
+ * The budget subtracted here is not decoration: the dock is anchored to the bottom and the
+ * toggle button sits *below* the panel, so the panel's height plus that button plus the
+ * gaps has to stay inside the viewport or the top of the panel is pushed off screen.
+ */
+@media (max-height: 560px) {
+  .chat-panel {
+    height: calc(100dvh - 140px);
+  }
+
+  .people-list {
+    max-height: 9rem;
   }
 }
 
@@ -2699,14 +2885,35 @@ button.chat-author {
   gap: 10px;
 }
 
+/*
+ * The name gets a line to itself. Sharing one with the Create button left it a stub you
+ * could not read a group name back from while typing it.
+ */
 .group-create {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .group-create input {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.group-create input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.group-create button {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .group-invites,

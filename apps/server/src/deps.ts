@@ -12,6 +12,7 @@ export interface Limiters {
   loginByIp: RateLimiter;
   loginByUsername: RateLimiter;
   usernameLookup: RateLimiter;
+  playerSearch: RateLimiter;
   characterChurn: RateLimiter;
   actions: RateLimiter;
   wsMessages: RateLimiter;
@@ -53,6 +54,9 @@ export function createLimiters(now?: () => number): Limiters {
     loginByIp: limiter({ limit: 10, windowMs: 15 * 60_000 }),
     loginByUsername: limiter({ limit: 5, windowMs: 15 * 60_000 }),
     usernameLookup: limiter({ limit: 60, windowMs: 60_000 }),
+    // Someone typing a name into the people search issues a request per keystroke-ish; this
+    // is comfortable for that and still bounds how fast the directory can be walked.
+    playerSearch: limiter({ limit: 30, windowMs: 60_000 }),
     characterChurn: limiter({ limit: 5, windowMs: 24 * 60 * 60_000 }),
     actions: limiter({ limit: 60, windowMs: 60_000 }),
     // Per socket: a turn needs one message, and no honest client sends more than a handful

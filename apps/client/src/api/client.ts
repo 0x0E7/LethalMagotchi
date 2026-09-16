@@ -222,6 +222,12 @@ export const api = {
     );
   },
 
+  /** No term: who is online now. With a term: find them by nickname, online or not. */
+  players(q?: string): Promise<DuelCardsResponse> {
+    const query = q && q.length > 0 ? `?q=${encodeURIComponent(q)}` : '';
+    return request<DuelCardsResponse>(`/players${query}`);
+  },
+
   donate(toCharacterId: string, coins: number): Promise<DonationResponse> {
     return request<DonationResponse>('/donations', { method: 'POST', body: { toCharacterId, coins } });
   },

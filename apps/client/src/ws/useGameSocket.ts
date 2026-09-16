@@ -4,6 +4,13 @@ import { currentAccessToken } from '../api/client.js';
 
 const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000];
 
+/**
+ * Messages sent before the socket is live are held rather than dropped. Bounded because a
+ * long offline spell must not grow without limit; the oldest go first, since the newest
+ * intent is the one worth keeping.
+ */
+const MAX_QUEUED_MESSAGES = 32;
+
 export type SocketStatus = 'connecting' | 'open' | 'offline';
 
 interface Options {
@@ -32,9 +39,25 @@ export function useGameSocket({ enabled, onMessage }: Options): GameSocket {
   const handler = useRef(onMessage);
   handler.current = onMessage;
 
+  const queued = useRef<ClientMessage[]>([]);
+
+  /**
+   * A send before the socket is live used to vanish silently, which is how a chat message
+   * could sit on "Sending…" forever: the caller had already marked it pending and nothing
+   * ever came back to settle it. Hold it instead and flush once the server says `ready`.
+   *
+   * Replaying a stale gameplay frame after a reconnect is safe by construction — every
+   * real-time protocol here echoes a `seq` and rejects a stale or duplicate one, which is
+   * exactly the case those guards exist for.
+   */
   const send = useCallback((message: ClientMessage) => {
     const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(message));
+      return;
+    }
+    if (queued.current.length >= MAX_QUEUED_MESSAGES) queued.current.shift();
+    queued.current.push(message);
   }, []);
 
   useEffect(() => {
@@ -76,6 +99,12 @@ export function useGameSocket({ enabled, onMessage }: Options): GameSocket {
           attempt = 0;
           setStatus('open');
           socket.send(JSON.stringify({ type: 'tourney:resync' } satisfies ClientMessage));
+          // Anything typed while the socket was down goes out now, in the order it was
+          // written. Flushed after `ready` rather than after `open`, so it lands on an
+          // authenticated socket bound to a character.
+          const pending = queued.current;
+          queued.current = [];
+          for (const held of pending) socket.send(JSON.stringify(held));
         }
         handler.current(message);
       };

@@ -83,6 +83,7 @@ export function relaxedLimiters(): Limiters {
     loginByIp: generous(),
     loginByUsername: generous(),
     usernameLookup: generous(),
+    playerSearch: generous(),
     characterChurn: generous(),
     actions: generous(),
     wsMessages: generous(),
