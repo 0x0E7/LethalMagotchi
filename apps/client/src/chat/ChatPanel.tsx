@@ -9,6 +9,8 @@ import {
   type DuelCardDto,
 } from '@lethalmagotchi/shared';
 import { useDuel } from '../duel/DuelProvider.js';
+import { GroupPanel } from '../groups/GroupPanel.js';
+import { useGroup } from '../groups/GroupProvider.js';
 import { DonateDialog } from '../raid/DonateDialog.js';
 import { useRaid } from '../raid/RaidProvider.js';
 import { announcementMatches, useAnnouncer } from '../routes/pet/hooks.js';
@@ -21,6 +23,7 @@ const LOAD_OLDER_PX = 40;
 
 function channelLabel(channel: ChatChannelDto): string {
   if (channel.kind === 'global') return channel.name ?? TOWN_SQUARE_NAME;
+  if (channel.kind === 'group') return channel.name ?? 'Group';
   return channel.counterpart?.nickname || '[deleted user]';
 }
 
@@ -51,6 +54,13 @@ function DuelStanding({ card, now }: { card: DuelCardDto; now: number }) {
   const chicken = isChickenBadgeActive(card.chickenBadgeUntil, now);
   return (
     <>
+      {/* Group names are unique where nicknames are not, so this doubles as a second
+          identity signal beside the `#tag` — which it does not replace. */}
+      {card.groupName !== null && (
+        <span className="chat-group-tag" title={`Member of ${card.groupName}`}>
+          {card.groupName}
+        </span>
+      )}
       <span className="chat-duel-record" aria-label={`${card.duelWins} duel wins, ${card.duelLosses} losses`}>
         {card.duelWins}W · {card.duelLosses}L
       </span>
@@ -73,12 +83,13 @@ export function ChatPanel() {
   const chat = useChat();
   const duel = useDuel();
   const raid = useRaid();
+  const group = useGroup();
   const { account, character } = useSession();
   const myCharacterId = character?.id ?? null;
   const [donating, setDonating] = useState<DuelCardDto | null>(null);
   const myAccountId = account?.id ?? null;
   const { message: announcement, announce } = useAnnouncer();
-  const [view, setView] = useState<'global' | 'direct'>('global');
+  const [view, setView] = useState<'global' | 'direct' | 'groups'>('global');
   const [draft, setDraft] = useState('');
   const logRef = useRef<HTMLDivElement | null>(null);
   const nearBottom = useRef(true);
@@ -103,12 +114,15 @@ export function ChatPanel() {
     ensureCards(townAuthors.split(','));
   }, [ensureCards, townAuthors]);
 
+  const groupChannelId = chat?.channels.find((channel) => channel.kind === 'group')?.id ?? null;
+
   // Opening a DM is something the provider can do on its own — from "message this player",
   // or from a conversation that did not exist when the panel rendered — so the tab follows
   // the active channel rather than only the tab strip.
   useEffect(() => {
-    if (activeChannelId !== TOWN_SQUARE_CHANNEL_ID) setView('direct');
-  }, [activeChannelId]);
+    if (activeChannelId === TOWN_SQUARE_CHANNEL_ID) return;
+    setView(activeChannelId === groupChannelId ? 'groups' : 'direct');
+  }, [activeChannelId, groupChannelId]);
 
   useLayoutEffect(() => {
     const log = logRef.current;
@@ -120,11 +134,15 @@ export function ChatPanel() {
 
   const dmChannels = chat.channels.filter((channel) => channel.kind === 'dm');
   const directUnread = dmChannels.reduce((sum, channel) => sum + (chat.threads[channel.id]?.unread ?? 0), 0);
+  const groupUnread = groupChannelId ? (chat.threads[groupChannelId]?.unread ?? 0) : 0;
   const townUnread = chat.threads[TOWN_SQUARE_CHANNEL_ID]?.unread ?? 0;
   const inDirectList = view === 'direct' && chat.activeChannelId === TOWN_SQUARE_CHANNEL_ID;
+  // The group view stands where the conversation list stands for DMs: the same
+  // list-then-thread shape, with a roster in place of a list of names.
+  const inGroupView = view === 'groups' && chat.activeChannelId !== groupChannelId;
   const archived = Boolean(thread?.channel.archivedAt);
   const blocked = Boolean(thread?.channel.blockedByMe);
-  const canSend = thread !== null && !archived && !blocked && !inDirectList;
+  const canSend = thread !== null && !archived && !blocked && !inDirectList && !inGroupView;
 
   /**
    * The Town Square is the only place a player meets someone they have no thread with, so
@@ -156,15 +174,36 @@ export function ChatPanel() {
 
   const openChannel = (channelId: string) => {
     chat.select(channelId);
-    setView(channelId === TOWN_SQUARE_CHANNEL_ID ? 'global' : 'direct');
+    setView(
+      channelId === TOWN_SQUARE_CHANNEL_ID ? 'global' : channelId === groupChannelId ? 'groups' : 'direct',
+    );
     nearBottom.current = true;
   };
 
-  const showTab = (next: 'global' | 'direct') => {
+  const showTab = (next: 'global' | 'direct' | 'groups') => {
     setView(next);
     if (next === 'global') chat.select(TOWN_SQUARE_CHANNEL_ID);
-    else if (chat.activeChannelId === TOWN_SQUARE_CHANNEL_ID && dmChannels[0]) openChannel(dmChannels[0].id);
+    else if (next === 'groups') {
+      // The segment lands on the group view, never straight into the room: joining, leaving
+      // and the roster are what a player comes here for.
+      if (chat.activeChannelId !== TOWN_SQUARE_CHANNEL_ID) chat.select(TOWN_SQUARE_CHANNEL_ID);
+      void group?.refresh();
+    } else if (chat.activeChannelId === TOWN_SQUARE_CHANNEL_ID && dmChannels[0]) {
+      openChannel(dmChannels[0].id);
+    }
   };
+
+  /**
+   * Shown where "message this player" is, and under the same Town Square-only rule: there is
+   * no player directory in the product, so the Square is where you meet someone to invite.
+   */
+  const myGroup = group?.group ?? null;
+  const canInviteToGroup = (authorAccountId: string | null): boolean =>
+    myGroup !== null &&
+    authorAccountId !== null &&
+    authorAccountId !== myAccountId &&
+    thread?.channel.kind === 'global' &&
+    !myGroup.members.some((member) => member.accountId === authorAccountId);
 
   return (
     <div className="chat-dock">
@@ -211,6 +250,23 @@ export function ChatPanel() {
                 Direct
                 {directUnread > 0 && <span className="chat-badge">{directUnread}</span>}
               </button>
+              <button
+                type="button"
+                role="tab"
+                id="chat-tab-groups"
+                aria-selected={view === 'groups'}
+                aria-controls="chat-tabpanel"
+                className={view === 'groups' ? 'segment active' : 'segment'}
+                onClick={() => showTab('groups')}
+              >
+                Groups
+                {groupUnread > 0 && <span className="chat-badge">{groupUnread}</span>}
+                {group !== null && group.invites.length > 0 && (
+                  <span className="chat-badge" aria-label={`${group.invites.length} invitations`}>
+                    {group.invites.length}
+                  </span>
+                )}
+              </button>
             </div>
             <button type="button" className="ghost small" onClick={() => chat.setOpen(false)}>
               Close
@@ -221,8 +277,17 @@ export function ChatPanel() {
             id="chat-tabpanel"
             className="chat-panel-body"
             role="tabpanel"
-            aria-labelledby={view === 'global' ? 'chat-tab-global' : 'chat-tab-direct'}
+            aria-labelledby={`chat-tab-${view}`}
           >
+            {view === 'groups' && chat.activeChannelId === groupChannelId && thread && (
+              <div className="chat-thread-bar">
+                <button type="button" className="link" onClick={() => chat.select(TOWN_SQUARE_CHANNEL_ID)}>
+                  ← Group
+                </button>
+                <strong>{channelLabel(thread.channel)}</strong>
+              </div>
+            )}
+
             {view === 'direct' && (
               <div className="chat-thread-bar">
                 {chat.activeChannelId !== TOWN_SQUARE_CHANNEL_ID && thread ? (
@@ -249,7 +314,9 @@ export function ChatPanel() {
               </div>
             )}
 
-            {inDirectList ? (
+            {inGroupView ? (
+              <GroupPanel onOpenChannel={openChannel} />
+            ) : inDirectList ? (
               <ul className="chat-threads" aria-label="Conversations">
                 {dmChannels.length === 0 && <li className="muted small">No conversations yet.</li>}
                 {dmChannels.map((channel) => (
@@ -367,6 +434,16 @@ export function ChatPanel() {
                                       Raid
                                     </button>
                                   )}
+                              {canInviteToGroup(message.authorAccountId) && (
+                                <button
+                                  type="button"
+                                  className="chat-group-invite"
+                                  aria-label={`Invite ${message.authorName} to your group`}
+                                  onClick={() => void group?.invite(message.authorAccountId as string)}
+                                >
+                                  Add to group
+                                </button>
+                              )}
                               {/* Absent, never disabled, for anyone who is not currently a
                                   beggar — the same rule the admin panel established. */}
                               {card.isBeggar && (
@@ -396,6 +473,18 @@ export function ChatPanel() {
             <p className="chat-note" role="alert">
               {chat.note}{' '}
               <button type="button" className="link" onClick={chat.dismissNote}>
+                Dismiss
+              </button>
+            </p>
+          )}
+
+          {/* Group actions are taken from wherever the player happens to be — an invitation
+              from the Town Square, a removal from the roster — so their answer lands in the
+              drawer's one note slot rather than inside the Groups tab. */}
+          {group?.note && (
+            <p className="chat-note" role="alert">
+              {group.note}{' '}
+              <button type="button" className="link" onClick={group.dismissNote}>
                 Dismiss
               </button>
             </p>

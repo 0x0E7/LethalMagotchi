@@ -98,6 +98,8 @@ export function relaxedLimiters(): Limiters {
     raidAction: generous(),
     raidResync: generous(),
     donation: generous(),
+    groupCreate: generous(),
+    groupInvite: generous(),
   };
 }
 

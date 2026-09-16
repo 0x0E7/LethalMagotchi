@@ -32,6 +32,7 @@ const card: DuelCardDto = {
   duelWins: 3,
   duelLosses: 1,
   chickenBadgeUntil: null,
+  groupName: null,
   duelEligible: true,
   raidEligible: true,
 };

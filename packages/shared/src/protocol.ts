@@ -275,6 +275,14 @@ export type ServerMessage =
   | { type: 'chat:rejected'; clientMsgId: string; code: ChatRejectCode; retryAfterMs?: number }
   | { type: 'chat:channel'; channel: ChatChannelDto }
   | { type: 'chat:unread'; channelId: string; unreadCount: number }
+  /**
+   * "Your group state changed, re-read it." It deliberately carries nothing: groups are a
+   * fetch-and-replace store on the client, and `/groups/me` is the one shape that answers
+   * every question about them — so a payload here would be a second copy of that answer,
+   * able to disagree with it. Sent to an account an invitation has just been issued to,
+   * which is the only group event a player cannot already see for themselves.
+   */
+  | { type: 'group:sync' }
   /** Unicast to the challenged character. */
   | {
       type: 'duel:invited';

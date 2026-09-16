@@ -21,7 +21,7 @@ export const TOWN_SQUARE_CHANNEL_ID = '00000000-0000-7000-8000-000000000001';
  */
 export const SYSTEM_AUTHOR_NAME = 'Town Crier';
 
-export type ChannelKind = 'global' | 'dm';
+export type ChannelKind = 'global' | 'dm' | 'group';
 export type MessageModeration = 'clean' | 'flagged';
 
 /**

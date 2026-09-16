@@ -25,6 +25,8 @@ export interface MessageRow {
   channel_id: string;
   author_account_id: string | null;
   author_character_id: string | null;
+  /** Who an authorless row is about, so their own arrival is not news to them. */
+  subject_account_id: string | null;
   author_name_snapshot: string;
   body: string;
   created_at: Date;
@@ -183,8 +185,11 @@ const CHANNEL_LIST_SQL = `
   JOIN chat_channel_members me
     ON me.channel_id = c.id AND me.account_id = $1 AND me.left_at IS NULL
   LEFT JOIN LATERAL (
+    -- A DM is labelled by the other participant; a group channel carries its own name and
+    -- has no counterpart to pick, so the lateral is skipped rather than answering with an
+    -- arbitrary one of up to thirty members.
     SELECT m.account_id FROM chat_channel_members m
-    WHERE m.channel_id = c.id AND m.account_id <> $1
+    WHERE c.kind = 'dm' AND m.channel_id = c.id AND m.account_id <> $1
     LIMIT 1
   ) other ON true
   LEFT JOIN characters ch ON ch.account_id = other.account_id AND ch.deleted_at IS NULL
@@ -201,6 +206,9 @@ const CHANNEL_LIST_SQL = `
     WHERE m.channel_id = c.id
       AND m.deleted_at IS NULL
       AND m.author_account_id IS DISTINCT FROM $1
+      -- The same principle one line up, for a row nobody authored: "X joined the group." is
+      -- not unread news to X. A normal message has no subject, so this excludes nothing else.
+      AND m.subject_account_id IS DISTINCT FROM $1
       AND (
         me.last_read_message_id IS NULL
         OR (m.created_at, m.id) > (
@@ -208,7 +216,7 @@ const CHANNEL_LIST_SQL = `
         )
       )
   ) unread ON true
-  WHERE c.kind = 'dm' AND ($2::uuid IS NULL OR c.id = $2)
+  WHERE c.kind = ANY($3::text[]) AND ($2::uuid IS NULL OR c.id = $2)
   ORDER BY last.created_at DESC NULLS LAST, c.created_at DESC
 `;
 
@@ -223,18 +231,23 @@ function listRowToDto(row: ChannelListRow): ChatChannelDto {
   });
 }
 
-export async function listDmChannelsForAccount(db: Db, accountId: string): Promise<ChatChannelDto[]> {
-  const result = await db.query<ChannelListRow>(CHANNEL_LIST_SQL, [accountId, null]);
+/**
+ * Every channel the caller holds a member row for. Group channels ride the same projection
+ * as DMs because their membership is the same table — the rule is "am I a member", never
+ * "what kind of room is this".
+ */
+export async function listMemberChannelsForAccount(db: Db, accountId: string): Promise<ChatChannelDto[]> {
+  const result = await db.query<ChannelListRow>(CHANNEL_LIST_SQL, [accountId, null, ['dm', 'group']]);
   return result.rows.map(listRowToDto);
 }
 
 /** The same projection as the list, for one channel, as one member sees it. */
-export async function findDmChannelDto(
+export async function findMemberChannelDto(
   db: Db,
   channelId: string,
   accountId: string,
 ): Promise<ChatChannelDto | null> {
-  const result = await db.query<ChannelListRow>(CHANNEL_LIST_SQL, [accountId, channelId]);
+  const result = await db.query<ChannelListRow>(CHANNEL_LIST_SQL, [accountId, channelId, ['dm', 'group']]);
   const row = result.rows[0];
   return row ? listRowToDto(row) : null;
 }
@@ -256,8 +269,25 @@ export async function leaveChatForAccount(db: Db, accountId: string): Promise<vo
 }
 
 export async function rejoinChatForAccount(db: Db, accountId: string): Promise<void> {
+  /**
+   * Scoped by what the account is still entitled to, not by what it once had: a group
+   * channel comes back only while the group membership behind it is live, so rebuilding a
+   * character cannot hand someone their way back into a group that removed them.
+   */
   await db.query(
-    'UPDATE chat_channel_members SET left_at = NULL WHERE account_id = $1 AND left_at IS NOT NULL',
+    `UPDATE chat_channel_members me SET left_at = NULL
+     FROM chat_channels c
+     WHERE c.id = me.channel_id
+       AND me.account_id = $1
+       AND me.left_at IS NOT NULL
+       AND (
+         c.kind <> 'group'
+         OR EXISTS (
+           SELECT 1 FROM groups g
+           JOIN group_members gm ON gm.group_id = g.id AND gm.account_id = me.account_id
+           WHERE g.channel_id = c.id AND gm.left_at IS NULL
+         )
+       )`,
     [accountId],
   );
   await db.query(
@@ -307,19 +337,30 @@ export async function insertMessage(
  *
  * Takes a `DbClient` because every caller so far writes it inside the transaction that
  * makes the event true, so the announcement and the event commit together.
+ *
+ * `subjectAccountId` names who the event is about — not who wrote it, which is nobody. It
+ * is only ever the account whose own action the row reports, so that the report of it does
+ * not come back to them as something unread.
  */
 export async function insertSystemMessage(
   client: DbClient,
-  input: { channelId: string; body: string; at?: Date },
+  input: { channelId: string; body: string; at?: Date; subjectAccountId?: string },
 ): Promise<MessageRow> {
   const result = await client.query<MessageRow>(
     `INSERT INTO chat_messages (
        id, channel_id, author_account_id, author_character_id, author_name_snapshot, body,
-       created_at, moderation
+       created_at, moderation, subject_account_id
      )
-     VALUES ($1, $2, NULL, NULL, $3, $4, COALESCE($5::timestamptz, now()), 'clean')
+     VALUES ($1, $2, NULL, NULL, $3, $4, COALESCE($5::timestamptz, now()), 'clean', $6)
      RETURNING *`,
-    [uuidv7(), input.channelId, SYSTEM_AUTHOR_NAME, input.body, input.at ?? null],
+    [
+      uuidv7(),
+      input.channelId,
+      SYSTEM_AUTHOR_NAME,
+      input.body,
+      input.at ?? null,
+      input.subjectAccountId ?? null,
+    ],
   );
   return result.rows[0]!;
 }
@@ -411,6 +452,7 @@ export async function unreadCountFor(db: Db, channelId: string, accountId: strin
      WHERE m.channel_id = $1
        AND m.deleted_at IS NULL
        AND m.author_account_id IS DISTINCT FROM $2
+       AND m.subject_account_id IS DISTINCT FROM $2
        AND (
          me.last_read_message_id IS NULL
          OR (m.created_at, m.id) > (

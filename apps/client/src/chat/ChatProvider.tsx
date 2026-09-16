@@ -41,6 +41,8 @@ interface ChatValue {
   retryHistory: (channelId: string) => Promise<void>;
   startDm: (targetAccountId: string) => Promise<void>;
   setBlocked: (targetAccountId: string, blocked: boolean) => Promise<void>;
+  /** For changes made outside chat that add or remove a channel — joining or leaving a group. */
+  refreshChannels: () => Promise<void>;
   dismissNote: () => void;
 }
 
@@ -61,10 +63,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const response = await api.chatChannels().catch(() => null);
     if (!response) return;
     dispatch({ type: 'channels', channels: response.channels });
-    const dmIds = response.channels
-      .filter((channel) => channel.kind === 'dm')
+    // Everything with member rows — DMs and the group channel. The Town Square is implicit.
+    const subscribable = response.channels
+      .filter((channel) => channel.kind !== 'global')
       .map((channel) => channel.id);
-    if (dmIds.length > 0) socket.send({ type: 'chat:subscribe', channelIds: dmIds });
+    if (subscribable.length > 0) socket.send({ type: 'chat:subscribe', channelIds: subscribable });
   }, [enabled, socket]);
 
   useEffect(() => {
@@ -271,9 +274,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       retryHistory,
       startDm,
       setBlocked,
+      refreshChannels: loadChannels,
       dismissNote: () => dispatch({ type: 'note', note: null }),
     }),
-    [state, channels, totalUnread, setOpen, select, send, loadOlder, retryHistory, startDm, setBlocked],
+    [
+      state,
+      channels,
+      totalUnread,
+      setOpen,
+      select,
+      send,
+      loadOlder,
+      retryHistory,
+      startDm,
+      setBlocked,
+      loadChannels,
+    ],
   );
 
   if (!enabled) return <>{children}</>;

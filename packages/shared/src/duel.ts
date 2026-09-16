@@ -115,6 +115,8 @@ export interface DuelCardDto {
   duelWins: number;
   duelLosses: number;
   chickenBadgeUntil: string | null;
+  /** The group this player belongs to, rendered in the same identity slot as the badges. */
+  groupName: string | null;
   /** Server's own read of the 24h account-age floor, so the UI never offers an invite that must fail. */
   duelEligible: boolean;
   /** The same read for raids: age floor, engagement lock, immunity and the wealth floor. */

@@ -2641,3 +2641,142 @@ button.chat-author {
   display: grid;
   gap: 8px;
 }
+
+/* ------------------------------------------------------------------ *
+ * Groups
+ * ------------------------------------------------------------------ */
+
+/* Deliberately the same register as the other identity marks beside a name: a group is a
+   social fact, not a rank, and nothing about it should read as status. */
+.chat-group-tag {
+  display: inline-block;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-sunken, var(--accent-soft));
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.chat-group-invite {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.group-panel {
+  overflow-y: auto;
+  flex: 1;
+  padding: 10px 12px;
+}
+
+.group-section {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.group-heading {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.group-create {
+  display: flex;
+  gap: 8px;
+}
+
+.group-create input {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-invites,
+.group-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.group-invite {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.group-invite-name {
+  font-weight: 700;
+}
+
+.group-invite-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.group-member-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-leader-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Reads as an action, not as a link: `--accent` does not carry enough contrast at this
+   size, which is the same reason the raid and donate affordances are inked. */
+.group-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.group-leave-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
