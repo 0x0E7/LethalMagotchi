@@ -2,7 +2,12 @@ import { STARTING_STATS, type CharacterStats } from './stats.js';
 
 export const STARTING_LETHAL_COINS = 5;
 
-export const REBIRTH_CAUSES = ['tournament_entry_hp_exhausted', 'duel_defeat'] as const;
+/**
+ * `neglect` is the one cause with no checkpoint behind it: the other two fire inside a
+ * transaction somebody started, while this one is what happens when nobody does anything at
+ * all. It is why death has to be reaped rather than merely derived on read.
+ */
+export const REBIRTH_CAUSES = ['tournament_entry_hp_exhausted', 'duel_defeat', 'neglect'] as const;
 export type RebirthCause = (typeof REBIRTH_CAUSES)[number];
 
 export interface RebirthState {

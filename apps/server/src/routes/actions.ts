@@ -9,6 +9,7 @@ import {
 import type { ServerDeps } from '../deps.js';
 import { ApiError } from '../errors.js';
 import { withTransaction } from '../db/pool.js';
+import { reapLocked } from '../neglect/service.js';
 import {
   commitCharacterState,
   lockActiveCharacterByAccount,
@@ -41,7 +42,7 @@ function toApiError(failure: ActionFailure): ApiError {
 }
 
 export async function registerActionRoutes(app: FastifyInstance, deps: ServerDeps): Promise<void> {
-  const { db, limiters } = deps;
+  const { db, limiters, neglect } = deps;
 
   app.post('/api/v1/characters/me/actions/:action', { onRequest: app.authenticate }, async (request, reply) => {
     const { action } = parseOrThrow(actionParamsSchema, request.params);
@@ -54,9 +55,21 @@ export async function registerActionRoutes(app: FastifyInstance, deps: ServerDep
       });
     }
 
-    const payload = await withTransaction(db, async (client) => {
+    const outcome = await withTransaction(db, async (client) => {
       const row = await lockActiveCharacterByAccount(client, request.accountId);
       if (!row) throw new ApiError(404, 'NO_CHARACTER', 'You do not have a character yet.');
+
+      /**
+       * Before anything else this route does: you cannot feed a corpse.
+       *
+       * The sweep and the socket handshake catch almost every death before it gets here, so
+       * this is the narrow case where HP crossed zero between them — but it has to be inside
+       * *this* transaction, on *this* locked row, or the action would resolve against stats
+       * the rebirth is simultaneously throwing away. The error is raised after the commit,
+       * deliberately: throwing here would roll back the death itself.
+       */
+      const reaped = await reapLocked(client, row, Date.now());
+      if (reaped.rebirth) return { kind: 'died' as const, rebirth: reaped.rebirth };
       // A seated character's coins are escrowed at the table; spending them here would
       // mean the same coin is in two places at once.
       if (row.seated_table_id) {
@@ -121,9 +134,18 @@ export async function registerActionRoutes(app: FastifyInstance, deps: ServerDep
           cooldownEndsAt: outcome.cooldownEndsAt,
         },
       };
-      return body;
+      return { kind: 'ok' as const, body };
     });
 
-    return reply.code(200).send(payload);
+    if (outcome.kind === 'died') {
+      neglect.announce(outcome.rebirth.character.id, outcome.rebirth, Date.now());
+      throw new ApiError(
+        409,
+        'CHARACTER_DIED',
+        'They did not make it. Their story starts again.',
+      );
+    }
+
+    return reply.code(200).send(outcome.body);
   });
 }

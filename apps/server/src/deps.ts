@@ -1,6 +1,7 @@
 import type { ChatService } from './chat/service.js';
 import type { Config } from './config.js';
 import type { DuelService } from './duel/service.js';
+import type { NeglectService } from './neglect/service.js';
 import type { RaidService } from './raid/service.js';
 import type { Db } from './db/pool.js';
 import { RateLimiter, type RateLimiterOptions } from './rate-limit.js';
@@ -42,6 +43,7 @@ export interface ServerDeps {
   chat: ChatService;
   duels: DuelService;
   raids: RaidService;
+  neglect: NeglectService;
 }
 
 /** `now` is injectable so a test can assert the *production* numbers, not a copy of them. */

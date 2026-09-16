@@ -23,6 +23,7 @@ import { DEFAULT_TOURNAMENT_CONFIG } from '../src/config.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createPool } from '../src/db/pool.js';
 import { DuelService } from '../src/duel/service.js';
+import { NeglectService } from '../src/neglect/service.js';
 import { RaidService } from '../src/raid/service.js';
 import { seedReferenceData } from '../src/db/seed.js';
 import type { Limiters } from '../src/deps.js';
@@ -180,6 +181,13 @@ const raids = new RaidService({
   parityMs: Number(process.env.E2E_RAID_PARITY_MS ?? 10_000),
 });
 
+// Swept fast in E2E so a starvation death lands inside a Playwright test's patience.
+const neglect = new NeglectService({
+  db,
+  hub,
+  sweepMs: Number(process.env.E2E_NEGLECT_SWEEP_MS ?? 1_000),
+});
+
 const app = await buildApp({
   config,
   db,
@@ -190,6 +198,7 @@ const app = await buildApp({
   chat,
   duels,
   raids,
+  neglect,
 });
 
 const shutdown = async () => {
@@ -216,6 +225,9 @@ try {
 
 await duels.start();
 await raids.start();
+
+// The one death nobody triggers, so something has to look for it.
+neglect.start();
 
 await app.listen({ port: config.port, host: config.host });
 // eslint-disable-next-line no-console

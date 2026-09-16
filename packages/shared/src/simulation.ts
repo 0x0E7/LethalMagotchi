@@ -20,6 +20,20 @@ export const HP_DAMAGE_PER_HOUR: Record<'hunger' | 'energy' | 'hygiene', number>
 
 export const HP_INPUT_KEYS = ['hunger', 'energy', 'hygiene'] as const;
 
+/**
+ * The HP at which a pet is dead.
+ *
+ * Deliberately not `<= 0`. Every surface that shows HP rounds it to a whole number, so a pet
+ * holding 0.4 HP already reads "0" on screen while being technically alive — which is exactly
+ * the shape of "it says zero and nothing happens", and at 6 HP/hour that window is minutes
+ * long. The number on screen is the contract: when it reaches zero, they are gone.
+ */
+export const HP_DEATH_THRESHOLD = 0.5;
+
+export function isDeadHp(hp: number): boolean {
+  return hp < HP_DEATH_THRESHOLD;
+}
+
 export const DECAY_MULTIPLIER_MIN = 0.75;
 export const DECAY_MULTIPLIER_MAX = 1.3;
 

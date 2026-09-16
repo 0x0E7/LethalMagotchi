@@ -135,6 +135,8 @@ export const API_ERROR_CODES = [
   'CHARACTER_SEATED',
   'CHARACTER_IN_DUEL',
   'CHARACTER_IN_RAID',
+  /** They reached 0 HP before this request landed, and the action was refused on a corpse. */
+  'CHARACTER_DIED',
   /** Coins already promised to a pending duel invite cannot be spent while it is live. */
   'DUEL_STAKE_RESERVED',
   /** A donation may only reach a character who currently holds nothing. */

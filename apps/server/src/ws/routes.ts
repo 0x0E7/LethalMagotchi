@@ -82,7 +82,7 @@ class ConnectionCounter {
 }
 
 export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps): Promise<void> {
-  const { db, hub, tournaments, chat, duels, raids, limiters } = deps;
+  const { db, hub, tournaments, chat, duels, raids, neglect, limiters } = deps;
 
   await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
 
@@ -231,6 +231,10 @@ export async function registerWebSocket(app: FastifyInstance, deps: ServerDeps):
               hub.add(connection);
               send({ type: 'ready', accountId: subject, characterId: bound });
               if (bound) {
+                // First, before anything resyncs against them: a pet that starved while its
+                // owner was away is dead on arrival, and every other service should be
+                // talking about the character they actually have now.
+                neglect.onCharacterOnline(bound);
                 tournaments.onCharacterOnline(bound);
                 duels.onCharacterOnline(bound);
                 raids.onCharacterOnline(bound);

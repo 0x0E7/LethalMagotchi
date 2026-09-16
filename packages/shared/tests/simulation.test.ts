@@ -10,6 +10,8 @@ import {
   DECAY_MULTIPLIER_MAX,
   DECAY_MULTIPLIER_MIN,
   HP_COMFORT_THRESHOLD,
+  HP_DEATH_THRESHOLD,
+  isDeadHp,
   HP_CRITICAL_THRESHOLD,
   HP_DAMAGE_PER_HOUR,
   HP_REGEN_PER_HOUR,
@@ -270,5 +272,39 @@ describe('simulateCharacter', () => {
     });
 
     expect(result).toEqual(STARTING_STATS);
+  });
+});
+
+describe('the death threshold', () => {
+  it('calls a pet dead as soon as its HP shows zero, not only at exactly zero', () => {
+    // The gap this closes: every HUD rounds HP to a whole number, so a pet at 0.4 already
+    // reads "0" on screen. Treating death as `hp <= 0` left it alive and displaying zero —
+    // which is what "it reaches 0 HP and nothing happens" actually looked like.
+    expect(isDeadHp(0)).toBe(true);
+    expect(isDeadHp(0.4)).toBe(true);
+    expect(Math.round(0.4)).toBe(0);
+
+    expect(isDeadHp(HP_DEATH_THRESHOLD)).toBe(false);
+    expect(isDeadHp(0.5)).toBe(false);
+    expect(Math.round(0.5)).toBe(1);
+  });
+
+  it('leaves a healthy pet alone', () => {
+    for (const hp of [1, 20, 50, 99.6, 100]) expect(isDeadHp(hp)).toBe(false);
+  });
+
+  it('is reachable: sustained neglect actually drives HP to zero', () => {
+    // Nothing subtle, just the arithmetic the reaper depends on — a pet left alone long
+    // enough must genuinely arrive at a dead HP rather than asymptote above it.
+    const starved = simulateCharacter({
+      stats: { ...STARTING_STATS },
+      speciesId: 'otter',
+      personalityId: 'goofball',
+      lastSimulatedAt: 0,
+      now: 14 * 24 * HOUR,
+    });
+
+    expect(starved.hp).toBe(0);
+    expect(isDeadHp(starved.hp)).toBe(true);
   });
 });

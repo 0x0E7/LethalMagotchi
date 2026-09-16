@@ -5,6 +5,7 @@ import { ChatService } from './chat/service.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db/pool.js';
 import { DuelService } from './duel/service.js';
+import { NeglectService } from './neglect/service.js';
 import { RaidService } from './raid/service.js';
 import { createLimiters } from './deps.js';
 import { TournamentService } from './tournament/service.js';
@@ -27,6 +28,7 @@ const tournaments = new TournamentService({
 const chat = new ChatService({ db, hub, limiters, log });
 const duels = new DuelService({ db, hub, chat, limiters, log });
 const raids = new RaidService({ db, hub, limiters, log });
+const neglect = new NeglectService({ db, hub, log });
 const chatRetention = new ChatRetentionJob({ db, log });
 
 const app = await buildApp({
@@ -39,6 +41,7 @@ const app = await buildApp({
   chat,
   duels,
   raids,
+  neglect,
 });
 
 const shutdown = async (signal: string) => {
@@ -46,6 +49,7 @@ const shutdown = async (signal: string) => {
   await tournaments.stop();
   await duels.stop();
   await raids.stop();
+  neglect.stop();
   await chatRetention.stop();
   hub.closeAll();
   await app.close();
@@ -74,6 +78,9 @@ await duels.start();
 // Same reasoning for raids: an escrow held by a raid whose runner died with the process
 // goes back to the wallet it came from before the first socket is accepted.
 await raids.start();
+
+// Deaths by neglect are the one kind nobody triggers, so something has to look.
+neglect.start();
 
 chatRetention.start();
 
