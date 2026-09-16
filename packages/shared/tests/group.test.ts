@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GROUP_CREATE_COOLDOWN_MS,
   GROUP_INVITE_TTL_MS,
   GROUP_KICK_COOLDOWN_MS,
   GROUP_MAX_MEMBERS,
@@ -9,9 +8,7 @@ import {
   cooldownEndsAt,
   groupChannelKey,
   groupCreateSchema,
-  isCreateCooldownActive,
   isKickCooldownActive,
-  isOldEnoughForGroup,
   normalizeGroupName,
 } from '../src/group.js';
 import { normalizeUsername } from '../src/username.js';
@@ -79,14 +76,8 @@ describe('the channel key', () => {
   });
 });
 
-describe('the age floor and the cooldowns', () => {
+describe('the kick cooldown', () => {
   const now = Date.UTC(2026, 0, 10, 12, 0, 0);
-
-  it('opens groups at exactly a day of account age', () => {
-    expect(isOldEnoughForGroup(new Date(now - DAY_MS + 1), now)).toBe(false);
-    expect(isOldEnoughForGroup(new Date(now - DAY_MS), now)).toBe(true);
-    expect(isOldEnoughForGroup(new Date(now - 30 * DAY_MS).toISOString(), now)).toBe(true);
-  });
 
   it('holds a kicked player for a day, to the millisecond', () => {
     expect(isKickCooldownActive(null, now)).toBe(false);
@@ -96,16 +87,10 @@ describe('the age floor and the cooldowns', () => {
     expect(isKickCooldownActive(new Date(now - GROUP_KICK_COOLDOWN_MS - 1).toISOString(), now)).toBe(false);
   });
 
-  it('holds a departed player to the same shape of window before founding one', () => {
-    expect(isCreateCooldownActive(null, now)).toBe(false);
-    expect(isCreateCooldownActive(new Date(now - GROUP_CREATE_COOLDOWN_MS + 1), now)).toBe(true);
-    expect(isCreateCooldownActive(new Date(now - GROUP_CREATE_COOLDOWN_MS), now)).toBe(false);
-  });
-
   it('reports when a window ends, so a refusal can say so', () => {
     const at = new Date(now - 6 * 60 * 60_000);
     expect(cooldownEndsAt(at, GROUP_KICK_COOLDOWN_MS).getTime()).toBe(at.getTime() + DAY_MS);
-    expect(cooldownEndsAt(at.toISOString(), GROUP_CREATE_COOLDOWN_MS).getTime()).toBe(at.getTime() + DAY_MS);
+    expect(cooldownEndsAt(at.toISOString(), GROUP_KICK_COOLDOWN_MS).getTime()).toBe(at.getTime() + DAY_MS);
   });
 });
 
@@ -114,6 +99,5 @@ describe('the tunable constants', () => {
     expect(GROUP_MAX_MEMBERS).toBe(30);
     expect(GROUP_INVITE_TTL_MS).toBe(7 * DAY_MS);
     expect(GROUP_KICK_COOLDOWN_MS).toBe(DAY_MS);
-    expect(GROUP_CREATE_COOLDOWN_MS).toBe(DAY_MS);
   });
 });

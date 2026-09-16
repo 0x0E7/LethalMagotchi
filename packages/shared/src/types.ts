@@ -151,8 +151,6 @@ export const API_ERROR_CODES = [
   'GROUP_INVITE_PENDING',
   /** A kicked player, still inside the 24h block their old group put them under. */
   'GROUP_KICK_COOLDOWN',
-  'GROUP_CREATE_COOLDOWN',
-  'GROUP_TOO_NEW',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;

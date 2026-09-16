@@ -167,11 +167,11 @@ describe('creating a group', () => {
     expect(response.json().error.code).toBe('NO_CHARACTER');
   });
 
-  it('refuses an account younger than a day', async () => {
-    const newborn = await makePlayer('Newborn', { accountAgeHours: 2 });
+  it('lets a brand-new account found a group straight away', async () => {
+    // The day-old account floor was removed: starting a group is immediate.
+    const newborn = await makePlayer('Newborn', { accountAgeHours: 0 });
     const response = await createGroup(newborn, groupName('Hatchlings'));
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('GROUP_TOO_NEW');
+    expect(response.statusCode, response.body).toBe(201);
   });
 
   it('refuses a second group while one is already held', async () => {
@@ -183,23 +183,16 @@ describe('creating a group', () => {
     expect(second.json().error.code).toBe('GROUP_MEMBERSHIP_EXISTS');
   });
 
-  it('holds a departed member to the create cooldown, and releases them after it', async () => {
+  it('lets a departed member found another group immediately', async () => {
+    // The post-leave cooldown was removed too: leaving one group does not park you.
     const leader = await makePlayer('Restless');
     const other = await makePlayer('Stayer');
     const groupId = await foundGroup(leader, groupName('Revolving'));
     await join(other, groupId, leader);
     expect((await leave(leader)).statusCode).toBe(200);
 
-    const tooSoon = await createGroup(leader, groupName('Rebound'));
-    expect(tooSoon.statusCode).toBe(429);
-    expect(tooSoon.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
-    expect(tooSoon.json().error.retryAfterSeconds).toBeGreaterThan(0);
-
-    await db.query(
-      `UPDATE group_members SET left_at = now() - interval '25 hours' WHERE account_id = $1 AND left_at IS NOT NULL`,
-      [leader.accountId],
-    );
-    expect((await createGroup(leader, groupName('Rebound'))).statusCode).toBe(201);
+    const rebound = await createGroup(leader, groupName('Rebound'));
+    expect(rebound.statusCode, rebound.body).toBe(201);
   });
 
   it('rejects a name moderation refuses', async () => {
@@ -310,10 +303,10 @@ describe('invitations', () => {
     const bodiless = await makePlayer('Bodiless', { withCharacter: false });
     expect((await invite(leader, groupId, bodiless)).statusCode).toBe(404);
 
-    const newborn = await makePlayer('Newborn', { accountAgeHours: 1 });
-    const tooNew = await invite(leader, groupId, newborn);
-    expect(tooNew.statusCode).toBe(403);
-    expect(tooNew.json().error.code).toBe('GROUP_TOO_NEW');
+    // No age floor any more: a fresh account can be invited and can accept.
+    const newborn = await makePlayer('Newborn', { accountAgeHours: 0 });
+    const fresh = await invite(leader, groupId, newborn);
+    expect(fresh.statusCode, fresh.body).toBe(201);
   });
 
   it('refuses a second live invitation to the same person from the same group', async () => {

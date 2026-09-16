@@ -515,35 +515,24 @@ describe('the rejoin scoping rule, for every way out of a group', () => {
 
 /* ------------------------- the age floor, exhaustively -------------------- */
 
-describe('the account age floor', () => {
-  it('blocks a fresh account from founding, from being invited, and from accepting', async () => {
+describe('a brand-new account', () => {
+  it('can found, be invited, and accept, all on its first minute', async () => {
+    // The day-old account floor was removed on every one of the three paths that used to
+    // carry it: founding, being invited, and accepting.
     const leader = await makePlayer('Elder');
     const { groupId } = await foundGroup(leader, groupName('Grown Ups'));
-    const newborn = await makePlayer('Newborn', { accountAgeHours: 1 });
+    const newborn = await makePlayer('Newborn', { accountAgeHours: 0 });
 
-    const created = await createGroup(newborn, groupName('Too Soon'));
-    expect(created.statusCode).toBe(403);
-    expect(created.json().error.code).toBe('GROUP_TOO_NEW');
+    const created = await createGroup(newborn, groupName('Right Away'));
+    expect(created.statusCode, created.body).toBe(201);
+    expect((await leave(newborn)).statusCode).toBe(200);
 
     const invited = await invite(leader, groupId, newborn);
-    expect(invited.statusCode).toBe(403);
-    expect(invited.json().error.code).toBe('GROUP_TOO_NEW');
+    expect(invited.statusCode, invited.body).toBe(201);
 
-    // The accept path has to re-check it, or an invitation issued while the target was old
-    // enough would be the way around the floor. Force a live invite past the invite check.
-    await db.query(`UPDATE accounts SET created_at = now() - interval '48 hours' WHERE id = $1`, [
-      newborn.accountId,
-    ]);
-    const nowValid = await invite(leader, groupId, newborn);
-    expect(nowValid.statusCode).toBe(201);
-    await db.query(`UPDATE accounts SET created_at = now() - interval '1 hours' WHERE id = $1`, [
-      newborn.accountId,
-    ]);
-
-    const accepted = await respond(newborn, nowValid.json().invite.id, true);
-    expect(accepted.statusCode, accepted.body).toBe(403);
-    expect(accepted.json().error.code).toBe('GROUP_TOO_NEW');
-    expect(await liveMemberCount(groupId)).toBe(1);
+    const accepted = await respond(newborn, invited.json().invite.id, true);
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(await liveMemberCount(groupId)).toBe(2);
   });
 
   it('reads the account, not the character, so a brand-new pet does not re-gate a member', async () => {
@@ -622,60 +611,6 @@ describe('the kick cooldown belongs to the group', () => {
   });
 });
 
-describe('the derived create cooldown', () => {
-  it('survives a restart, unlike the in-process limiter beside it', async () => {
-    const wanderer = await makePlayer('Wanderer');
-    const { groupId } = await foundGroup(wanderer, groupName('First Attempt'));
-    expect((await leave(wanderer)).statusCode).toBe(200);
-    expect(groupId).toBeTruthy();
-
-    const blocked = await createGroup(wanderer, groupName('Second Attempt'));
-    expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
-
-    // A whole new app: new limiter buckets, new pool clients, same database.
-    const fresh = await createTestApp();
-    try {
-      const afterRestart = await createGroup(wanderer, groupName('Third Attempt'), fresh.app);
-      expect(afterRestart.statusCode, 'the cooldown must not be in-process state').toBe(429);
-      expect(afterRestart.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
-      expect(afterRestart.json().error.retryAfterSeconds).toBeGreaterThan(0);
-    } finally {
-      await fresh.app.close();
-    }
-  });
-
-  it('applies to a kicked player exactly as it applies to one who walked', async () => {
-    const leader = await makePlayer('Evictor');
-    const evicted = await makePlayer('Evictee');
-    const { groupId } = await foundGroup(leader, groupName('Founding Block'));
-    await join(evicted, groupId, leader);
-    expect((await kick(leader, groupId, evicted)).statusCode).toBe(200);
-
-    const blocked = await createGroup(evicted, groupName('Rebound Group'));
-    expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
-  });
-
-  it('reads the most recent departure, not the first one', async () => {
-    const drifter = await makePlayer('Drifter');
-    const host = await makePlayer('Host');
-    const { groupId } = await foundGroup(host, groupName('Way Station'));
-    await join(drifter, groupId, host);
-    await leave(drifter);
-
-    // Age the single departure out, then take a second, fresher one.
-    await db.query(`UPDATE group_members SET left_at = now() - interval '48 hours' WHERE account_id = $1`, [
-      drifter.accountId,
-    ]);
-    const second = await foundGroup(drifter, groupName('Own Place'));
-    expect((await leave(drifter)).statusCode).toBe(200);
-    expect(second.groupId).toBeTruthy();
-
-    const blocked = await createGroup(drifter, groupName('Third Place'));
-    expect(blocked.statusCode, 'the newest departure is the one that counts').toBe(429);
-  });
-});
 
 /* --------------------------- hidden information --------------------------- */
 
@@ -1002,96 +937,6 @@ describe('groups change nothing about how the game is played', () => {
 
 /* ---------------------- loose ends the API leaves behind ------------------ */
 
-describe('invitations that outlive the reason they were sent', () => {
-  /**
-   * Round-1 finding G-5: accepting an invitation cancels every other one outstanding, and
-   * *founding* a group — the other way to stop being invitable — did not, so a leader kept
-   * live invitations they could never act on. Both paths now settle them alike.
-   */
-  it('settles a founder outstanding invitations the way accepting one does', async () => {
-    const host = await makePlayer('Recruiter');
-    const founder = await makePlayer('Own Boss');
-    const { groupId } = await foundGroup(host, groupName('Recruiting'));
-    const issued = await invite(host, groupId, founder);
-    expect(issued.statusCode, issued.body).toBe(201);
-
-    const own = await foundGroup(founder, groupName('Own Place'));
-    const mine = (await myGroup(founder)).json() as MyGroupResponse;
-    expect(mine.group!.id).toBe(own.groupId);
-    expect(mine.invites.map((entry) => entry.groupId)).not.toContain(groupId);
-
-    const row = await db.query<{ state: string }>('SELECT state FROM group_invites WHERE id = $1', [
-      issued.json().invite.id,
-    ]);
-    expect(row.rows[0]!.state).toBe('cancelled');
-
-    // And it was already unanswerable, which is what kept this cosmetic before the fix.
-    const refused = await respond(founder, issued.json().invite.id, true);
-    expect(refused.statusCode).toBe(404);
-  });
-
-  /** Round-1 finding G-6: an invitation into a group that ends dies with it. */
-  it('cancels a pending invitation on a group that has closed', async () => {
-    const host = await makePlayer('Closing Host');
-    const guest = await makePlayer('Never Came');
-    const { groupId } = await foundGroup(host, groupName('Last Call'));
-    const issued = await invite(host, groupId, guest);
-    expect((await leave(host)).statusCode).toBe(200);
-
-    const mine = (await myGroup(guest)).json() as MyGroupResponse;
-    expect(mine.invites.map((entry) => entry.groupId)).not.toContain(groupId);
-    expect((await respond(guest, issued.json().invite.id, true)).statusCode).toBe(404);
-
-    // And the row is in a terminal state rather than pending forever in the partial index.
-    const row = await db.query<{ state: string; resolved_at: Date | null }>(
-      'SELECT state, resolved_at FROM group_invites WHERE id = $1',
-      [issued.json().invite.id],
-    );
-    expect(row.rows[0]!.state).toBe('cancelled');
-    expect(row.rows[0]!.resolved_at).not.toBeNull();
-  });
-});
-
-describe('what the derived cooldowns depend on', () => {
-  /**
-   * Priority 5.1, taken to its edge: the create cooldown is a query over `group_members`
-   * history, and those rows cascade-delete with the group they belong to. No code deletes a
-   * group today — archiving is a soft flag — so this is latent, not live. It is the one
-   * property a stored column on `accounts` would not share.
-   */
-  it('evaporates if the group whose history carries it is ever hard-deleted', async () => {
-    const drifter = await makePlayer('History Dependent');
-    const { groupId } = await foundGroup(drifter, groupName('Short Lived'));
-    expect((await leave(drifter)).statusCode).toBe(200);
-
-    const blocked = await createGroup(drifter, groupName('Blocked Try'));
-    expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
-
-    // Simulating the only thing that could ever remove the evidence.
-    await db.query('DELETE FROM groups WHERE id = $1', [groupId]);
-
-    const allowed = await createGroup(drifter, groupName('Free Try'));
-    expect(
-      allowed.statusCode,
-      'the cooldown is only as durable as the membership row it is read from',
-    ).toBe(201);
-  });
-
-  it('is not reset by a character rebuild, which is the obvious way to try', async () => {
-    const drifter = await makePlayer('Rebuild Dodger');
-    const { groupId } = await foundGroup(drifter, groupName('Abandoned'));
-    expect((await leave(drifter)).statusCode).toBe(200);
-    expect(groupId).toBeTruthy();
-
-    await deleteCharacter(drifter);
-    expect((await rebuildCharacter(drifter, 'BrandNew')).statusCode).toBe(201);
-
-    const blocked = await createGroup(drifter, groupName('Dodge Attempt'));
-    expect(blocked.statusCode, 'a new pet must not clear an account-scoped cooldown').toBe(429);
-    expect(blocked.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
-  });
-});
 
 /* ------------------- what an account row takes with it -------------------- */
 

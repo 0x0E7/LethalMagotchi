@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import {
-  GROUP_CREATE_COOLDOWN_MS,
   GROUP_INVITE_TTL_MS,
   GROUP_KICK_COOLDOWN_MS,
   GROUP_MAX_MEMBERS,
@@ -10,9 +9,7 @@ import {
   groupCreateSchema,
   groupInviteRespondSchema,
   groupInviteSchema,
-  isCreateCooldownActive,
   isKickCooldownActive,
-  isOldEnoughForGroup,
   normalizeGroupName,
   type GroupInviteDto,
   type GroupResponse,
@@ -43,7 +40,6 @@ import {
   insertMember,
   isActiveMember,
   joinGroupChannel,
-  lastDepartureAt,
   lastRemovedAt,
   leaveGroupMembership,
   listPendingInvitesFor,
@@ -73,12 +69,6 @@ export async function registerGroupRoutes(app: FastifyInstance, deps: ServerDeps
     const character = await findActiveCharacterByAccount(db, accountId);
     if (!character) throw new ApiError(404, 'NO_CHARACTER', 'You do not have a character yet.');
     return character;
-  };
-
-  const requireAccount = async (accountId: string): Promise<AccountRow> => {
-    const account = await findAccountById(db, accountId);
-    if (!account) throw new ApiError(401, 'UNAUTHORIZED', 'Account no longer exists.');
-    return account;
   };
 
   /**
@@ -133,18 +123,7 @@ export async function registerGroupRoutes(app: FastifyInstance, deps: ServerDeps
     }
 
     await requireCharacter(accountId);
-    const account = await requireAccount(accountId);
     const now = Date.now();
-    if (!isOldEnoughForGroup(account.created_at, now)) {
-      throw new ApiError(403, 'GROUP_TOO_NEW', 'Groups open up once your account is a day old.');
-    }
-
-    const departed = await lastDepartureAt(db, accountId);
-    if (departed && isCreateCooldownActive(departed, now)) {
-      throw new ApiError(429, 'GROUP_CREATE_COOLDOWN', 'You left a group recently. Try again tomorrow.', {
-        retryAfterSeconds: secondsUntil(cooldownEndsAt(departed, GROUP_CREATE_COOLDOWN_MS), now),
-      });
-    }
 
     const budget = limiters.groupCreate.check(accountId);
     if (!budget.allowed) {
@@ -226,9 +205,6 @@ export async function registerGroupRoutes(app: FastifyInstance, deps: ServerDeps
     }
     const targetAccount = await findAccountById(db, toAccountId);
     if (!targetAccount) throw new ApiError(404, 'NOT_FOUND', 'That player is not around.');
-    if (!isOldEnoughForGroup(targetAccount.created_at, now)) {
-      throw new ApiError(403, 'GROUP_TOO_NEW', 'Their account is too new to join a group.');
-    }
     if (await isBlockedEitherWay(db, accountId, toAccountId)) {
       throw new ApiError(403, 'BLOCKED', 'You cannot invite this player.');
     }
@@ -325,11 +301,6 @@ export async function registerGroupRoutes(app: FastifyInstance, deps: ServerDeps
     }
 
     const character = await requireCharacter(accountId);
-    const account = await requireAccount(accountId);
-    if (!isOldEnoughForGroup(account.created_at, now)) {
-      throw new ApiError(403, 'GROUP_TOO_NEW', 'Groups open up once your account is a day old.');
-    }
-
     let joined: { group: GroupRow; system: MessageRow };
     try {
       joined = await withTransaction(db, async (client) => {

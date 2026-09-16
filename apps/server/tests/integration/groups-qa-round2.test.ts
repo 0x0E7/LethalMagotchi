@@ -898,17 +898,16 @@ describe('G-3: nothing in the product hard-deletes a group', () => {
 
     await deleteAccount(leader.accountId);
 
-    // The departing member's own history is what their cooldown reads, and deleting
-    // somebody else's account must not clear it.
+    // Deleting somebody else's account must not disturb this member's own departure row.
     const departure = await db.query<{ count: string }>(
       'SELECT count(*) FROM group_members WHERE account_id = $1 AND left_at IS NOT NULL',
       [member.accountId],
     );
     expect(Number(departure.rows[0]!.count)).toBe(1);
 
-    const blocked = await createGroup(member, groupName('Too Soon'));
-    expect(blocked.statusCode).toBe(429);
-    expect(blocked.json().error.code).toBe('GROUP_CREATE_COOLDOWN');
+    // And with the create cooldown gone, that departure parks them for exactly no time.
+    const rebound = await createGroup(member, groupName('Straight Away'));
+    expect(rebound.statusCode, rebound.body).toBe(201);
 
     // Shared database: this test deletes the last remaining account, so it leaves behind an
     // instance of R2-1 — a live, empty, leaderless group that the heal provably cannot

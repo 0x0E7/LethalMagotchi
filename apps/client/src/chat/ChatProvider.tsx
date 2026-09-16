@@ -24,6 +24,13 @@ import { actionForServerMessage, initialState, reducer, type State, type Thread 
 
 export type { Thread } from './state.js';
 
+/**
+ * How long a send may sit unacknowledged before the composer stops claiming it is still
+ * working. Generous enough to cover a slow round trip or a reconnect flush, short enough
+ * that a player is not left staring at "Sending…" wondering whether to retype.
+ */
+const SEND_ACK_TIMEOUT_MS = 10_000;
+
 interface ChatValue {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -55,6 +62,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const enabled = sessionStatus === 'authenticated' && character !== null;
 
   const stateRef = useRef(state);
+  /** Sends still waiting on a `chat:ack` or `chat:rejected`, so a timeout knows its own. */
+  const outstanding = useRef(new Set<string>());
   stateRef.current = state;
   const accountId = character?.accountId ?? null;
 
@@ -86,6 +95,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       if (message.type === 'chat:channel') {
         socket.send({ type: 'chat:subscribe', channelIds: [message.channel.id] });
+      }
+      // The server has answered for this one, so its timeout must not fire later and
+      // report a failure for a message that actually landed.
+      if (message.type === 'chat:ack' || message.type === 'chat:rejected') {
+        outstanding.current.delete(message.clientMsgId);
       }
       const action = actionForServerMessage(message, accountId);
       if (action) dispatch(action);
@@ -173,13 +187,27 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     (raw: string) => {
       const body = sanitizeMessageBody(raw);
       if (body.length === 0 || body.length > MESSAGE_MAX) return;
+      const clientMsgId = crypto.randomUUID();
+      outstanding.current.add(clientMsgId);
       dispatch({ type: 'sending' });
       socket.send({
         type: 'chat:send',
-        clientMsgId: crypto.randomUUID(),
+        clientMsgId,
         channelId: stateRef.current.activeChannelId,
         body,
       });
+      // Belt and braces for "Sending…" that never clears. The socket queue means a send
+      // survives a closed connection, but nothing can promise the *server* answers — so a
+      // send that goes unacknowledged settles itself and says so, rather than leaving the
+      // composer claiming work that is not happening.
+      //
+      // Keyed on this message rather than on the pending count: with a second send already
+      // in flight, a count-based check would let this timer settle *that* one and report a
+      // failure for a message that is perfectly fine.
+      window.setTimeout(() => {
+        if (!outstanding.current.delete(clientMsgId)) return;
+        dispatch({ type: 'settled', note: 'That message has not gone through yet. Check your connection.' });
+      }, SEND_ACK_TIMEOUT_MS);
     },
     [socket],
   );

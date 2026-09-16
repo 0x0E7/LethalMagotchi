@@ -3,6 +3,7 @@ import { GROUP_MAX_MEMBERS, GROUP_NAME_MAX } from '@lethalmagotchi/shared';
 import { useChat } from '../chat/ChatProvider.js';
 import { useDuel } from '../duel/DuelProvider.js';
 import { useSession } from '../session/SessionProvider.js';
+import { PeoplePicker } from '../chat/PeoplePicker.js';
 import { useGroup } from './GroupProvider.js';
 
 function expiryLabel(iso: string): string {
@@ -128,7 +129,7 @@ export function GroupPanel({ onOpenChannel }: { onOpenChannel: (channelId: strin
             </button>
           </div>
           <p className="muted small">
-            {mine.memberCount} of {GROUP_MAX_MEMBERS} members · invite people from the Town Square.
+            {mine.memberCount} of {GROUP_MAX_MEMBERS} members
           </p>
 
           <ul className="group-roster" aria-label={`${mine.name} members`}>
@@ -150,6 +151,27 @@ export function GroupPanel({ onOpenChannel }: { onOpenChannel: (channelId: strin
               </li>
             ))}
           </ul>
+
+          {/* Any member may invite, and this is the only way to reach someone who is not
+              currently talking in the Town Square. Hidden once the group is full, since the
+              server would refuse every pick anyway. */}
+          {mine.memberCount < GROUP_MAX_MEMBERS && (
+            <section className="group-section" aria-labelledby="group-add-heading">
+              <h4 id="group-add-heading" className="group-heading">
+                Add members
+              </h4>
+              <PeoplePicker
+                actionLabel="Add"
+                pickedLabel="In group"
+                isPicked={(card) =>
+                  card.accountId !== null && mine.members.some((member) => member.accountId === card.accountId)
+                }
+                onPick={(card) => {
+                  if (card.accountId) void group.invite(card.accountId);
+                }}
+              />
+            </section>
+          )}
 
           {confirmingLeave ? (
             <p className="group-leave-confirm">

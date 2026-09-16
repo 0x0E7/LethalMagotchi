@@ -337,23 +337,6 @@ export async function lastRemovedAt(db: Db | DbClient, groupId: string, accountI
   return result.rows[0]?.removed_at ?? null;
 }
 
-/**
- * When this account last stopped being in a group, whichever group and however it ended.
- * Derived from membership history for the same reason the duel decline cooldown is: a stored
- * flag is a second copy of a fact the rows already carry, and it does not survive a deploy
- * the way a column does.
- */
-export async function lastDepartureAt(db: Db | DbClient, accountId: string): Promise<Date | null> {
-  const result = await db.query<{ left_at: Date }>(
-    `SELECT left_at FROM group_members
-     WHERE account_id = $1 AND left_at IS NOT NULL
-     ORDER BY left_at DESC
-     LIMIT 1`,
-    [accountId],
-  );
-  return result.rows[0]?.left_at ?? null;
-}
-
 /* -------------------------------- invites -------------------------------- */
 
 /**

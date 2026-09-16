@@ -9,6 +9,7 @@ import {
   type DuelCardDto,
 } from '@lethalmagotchi/shared';
 import { useDuel } from '../duel/DuelProvider.js';
+import { PeoplePicker } from './PeoplePicker.js';
 import { GroupPanel } from '../groups/GroupPanel.js';
 import { useGroup } from '../groups/GroupProvider.js';
 import { DonateDialog } from '../raid/DonateDialog.js';
@@ -92,7 +93,20 @@ export function ChatPanel() {
   const [view, setView] = useState<'global' | 'direct' | 'groups'>('global');
   const [draft, setDraft] = useState('');
   const logRef = useRef<HTMLDivElement | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const nearBottom = useRef(true);
+
+  /**
+   * Grow the composer to fit what is being written. Reset to `auto` first so it shrinks back
+   * when text is deleted — measuring `scrollHeight` against a stale height only ever grows.
+   * The cap lives in CSS (`max-height`), and past it the textarea scrolls.
+   */
+  useLayoutEffect(() => {
+    const box = draftRef.current;
+    if (!box) return;
+    box.style.height = 'auto';
+    box.style.height = `${box.scrollHeight}px`;
+  }, [draft]);
 
   const lastIncoming = chat?.lastIncoming ?? null;
   const spoken = lastIncoming ? `${lastIncoming.authorName} says ${lastIncoming.body}` : null;
@@ -164,12 +178,16 @@ export function ChatPanel() {
     if (log.scrollTop < LOAD_OLDER_PX) void chat.loadOlder(chat.activeChannelId);
   };
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    if (draft.trim().length === 0) return;
+  const submitDraft = () => {
+    if (!canSend || draft.trim().length === 0) return;
     chat.send(draft);
     setDraft('');
     nearBottom.current = true;
+  };
+
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    submitDraft();
   };
 
   const openChannel = (channelId: string) => {
@@ -317,19 +335,35 @@ export function ChatPanel() {
             {inGroupView ? (
               <GroupPanel onOpenChannel={openChannel} />
             ) : inDirectList ? (
-              <ul className="chat-threads" aria-label="Conversations">
-                {dmChannels.length === 0 && <li className="muted small">No conversations yet.</li>}
-                {dmChannels.map((channel) => (
-                  <li key={channel.id}>
-                    <button type="button" className="chat-thread-row" onClick={() => openChannel(channel.id)}>
-                      <span className="chat-thread-name">{channelLabel(channel)}</span>
-                      {(chat.threads[channel.id]?.unread ?? 0) > 0 && (
-                        <span className="chat-badge">{chat.threads[channel.id]?.unread}</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="chat-direct-list">
+                <ul className="chat-threads" aria-label="Conversations">
+                  {dmChannels.length === 0 && <li className="muted small">No conversations yet.</li>}
+                  {dmChannels.map((channel) => (
+                    <li key={channel.id}>
+                      <button type="button" className="chat-thread-row" onClick={() => openChannel(channel.id)}>
+                        <span className="chat-thread-name">{channelLabel(channel)}</span>
+                        {(chat.threads[channel.id]?.unread ?? 0) > 0 && (
+                          <span className="chat-badge">{chat.threads[channel.id]?.unread}</span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Reaching someone used to mean waiting for them to say something in the
+                    Town Square. This is the way to find them instead. */}
+                <section className="chat-people" aria-labelledby="chat-people-heading">
+                  <h3 id="chat-people-heading" className="group-heading">
+                    Start a conversation
+                  </h3>
+                  <PeoplePicker
+                    actionLabel="Message"
+                    onPick={(card) => {
+                      if (card.accountId) void chat.startDm(card.accountId);
+                    }}
+                  />
+                </section>
+              </div>
             ) : (
               <div
                 id="chat-log"
@@ -497,10 +531,15 @@ export function ChatPanel() {
             <label className="sr-only" htmlFor="chat-draft">
               Write a message to {thread ? channelLabel(thread.channel) : 'this channel'}
             </label>
-            <input
+            {/* A textarea, not an input: an input cannot wrap, so anything longer than the
+                box scrolled sideways out of sight while you were still typing it. This grows
+                with the message instead, up to a cap, and then scrolls. */}
+            <textarea
               id="chat-draft"
               name="chatDraft"
+              ref={draftRef}
               value={draft}
+              rows={1}
               maxLength={MESSAGE_MAX}
               autoComplete="off"
               disabled={!canSend}
@@ -508,10 +547,23 @@ export function ChatPanel() {
                 blocked ? 'You blocked this player.' : archived ? 'This conversation is closed.' : 'Say something…'
               }
               onChange={(event) => setDraft(event.target.value)}
+              // Enter sends, because that is what every chat does. Shift+Enter is the escape
+              // hatch for a deliberate second line.
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  submitDraft();
+                }
+              }}
             />
             <button type="submit" className="primary" disabled={!canSend || draft.trim().length === 0}>
               Send
             </button>
+            {draft.length > MESSAGE_MAX - 80 && (
+              <p className="chat-remaining small muted" aria-live="polite">
+                {MESSAGE_MAX - draft.length} left
+              </p>
+            )}
           </form>
         </section>
       )}

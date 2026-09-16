@@ -16,14 +16,15 @@ export const GROUP_NAME_MAX = 24;
 /** Long enough that an invite survives a week away from the game. */
 export const GROUP_INVITE_TTL_MS = 7 * DAY_MS;
 
-/** The same griefing floor duels and raids use, read off the account rather than the pet. */
-export const GROUP_MIN_ACCOUNT_AGE_MS = DAY_MS;
-
-/** How long a kicked player is un-invitable *by the group that kicked them*. */
+/**
+ * How long a kicked player is un-invitable *by the group that kicked them*.
+ *
+ * The one time gate groups still have. The account-age floor and the post-leave create
+ * cooldown were both removed — founding and joining are immediate — but this one is not
+ * about pacing a player, it is what stops a group kicking someone and pulling them
+ * straight back as a way to lean on them.
+ */
 export const GROUP_KICK_COOLDOWN_MS = DAY_MS;
-
-/** How long after leaving or losing a group a player must wait before founding one. */
-export const GROUP_CREATE_COOLDOWN_MS = DAY_MS;
 
 export const GROUP_INVITE_STATES = ['pending', 'accepted', 'declined', 'expired', 'cancelled'] as const;
 export type GroupInviteState = (typeof GROUP_INVITE_STATES)[number];
@@ -47,23 +48,11 @@ export function groupChannelKey(groupId: string): string {
   return `group:${groupId}`;
 }
 
-export function isOldEnoughForGroup(accountCreatedAt: string | Date, now: number): boolean {
-  const born = accountCreatedAt instanceof Date ? accountCreatedAt.getTime() : Date.parse(accountCreatedAt);
-  return now - born >= GROUP_MIN_ACCOUNT_AGE_MS;
-}
-
 /** True while the group that removed this player still cannot invite them back. */
 export function isKickCooldownActive(removedAt: string | Date | null, now: number): boolean {
   if (removedAt === null) return false;
   const at = removedAt instanceof Date ? removedAt.getTime() : Date.parse(removedAt);
   return now - at < GROUP_KICK_COOLDOWN_MS;
-}
-
-/** True while a player who has just left or lost a group still cannot found another. */
-export function isCreateCooldownActive(lastLeftAt: string | Date | null, now: number): boolean {
-  if (lastLeftAt === null) return false;
-  const at = lastLeftAt instanceof Date ? lastLeftAt.getTime() : Date.parse(lastLeftAt);
-  return now - at < GROUP_CREATE_COOLDOWN_MS;
 }
 
 export function cooldownEndsAt(at: string | Date, windowMs: number): Date {
