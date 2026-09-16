@@ -8,6 +8,7 @@ import {
   type ChatChannelDto,
   type DuelCardDto,
 } from '@lethalmagotchi/shared';
+import { duelUnavailable } from '../duel/DuelFinder.js';
 import { useDuel } from '../duel/DuelProvider.js';
 import { PeoplePicker } from './PeoplePicker.js';
 import { GroupPanel } from '../groups/GroupPanel.js';
@@ -351,16 +352,28 @@ export function ChatPanel() {
                 </ul>
 
                 {/* Reaching someone used to mean waiting for them to say something in the
-                    Town Square. This is the way to find them instead. */}
+                    Town Square — for a message, and for a challenge just the same. This is
+                    the way to find them instead. */}
                 <section className="chat-people" aria-labelledby="chat-people-heading">
                   <h3 id="chat-people-heading" className="group-heading">
-                    Start a conversation
+                    Find a player
                   </h3>
                   <PeoplePicker
-                    actionLabel="Message"
-                    onPick={(card) => {
-                      if (card.accountId) void chat.startDm(card.accountId);
-                    }}
+                    actions={[
+                      {
+                        label: 'Message',
+                        onPick: (card) => {
+                          if (card.accountId) void chat.startDm(card.accountId);
+                        },
+                      },
+                      {
+                        label: 'Duel',
+                        onPick: (card) => duel?.openStakes(card),
+                        // Says what it is waiting for, rather than leaving a dead gap where a
+                        // button should be.
+                        unavailable: duelUnavailable,
+                      },
+                    ]}
                   />
                 </section>
               </div>

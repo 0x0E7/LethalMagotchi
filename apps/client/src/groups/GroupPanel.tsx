@@ -161,14 +161,19 @@ export function GroupPanel({ onOpenChannel }: { onOpenChannel: (channelId: strin
                 Add members
               </h4>
               <PeoplePicker
-                actionLabel="Add"
-                pickedLabel="In group"
-                isPicked={(card) =>
-                  card.accountId !== null && mine.members.some((member) => member.accountId === card.accountId)
-                }
-                onPick={(card) => {
-                  if (card.accountId) void group.invite(card.accountId);
-                }}
+                actions={[
+                  {
+                    label: 'Add',
+                    onPick: (card) => {
+                      if (card.accountId) void group.invite(card.accountId);
+                    },
+                    unavailable: (card) =>
+                      card.accountId !== null &&
+                      mine.members.some((member) => member.accountId === card.accountId)
+                        ? 'In group'
+                        : null,
+                  },
+                ]}
               />
             </section>
           )}

@@ -63,7 +63,12 @@ export async function registerPlayerRoutes(app: FastifyInstance, deps: ServerDep
     const now = Date.now();
     const payload: DuelCardsResponse = {
       cards: rows.map((row) =>
-        toDuelCardDto(row, now, row.account_id ? (groups.get(row.account_id) ?? null) : null),
+        toDuelCardDto(
+          row,
+          now,
+          row.account_id ? (groups.get(row.account_id) ?? null) : null,
+          hub.isOnline(row.id),
+        ),
       ),
     };
     return reply.code(200).send(payload);

@@ -34,6 +34,7 @@ const card: DuelCardDto = {
   chickenBadgeUntil: null,
   groupName: null,
   duelEligible: true,
+  duelBlockedReason: null,
   raidEligible: true,
 };
 

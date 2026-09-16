@@ -14,6 +14,7 @@ import {
 } from '@lethalmagotchi/shared';
 import { ApiRequestError, NetworkError } from '../../api/client.js';
 import { ChatPanel } from '../../chat/ChatPanel.js';
+import { DuelFinder } from '../../duel/DuelFinder.js';
 import { DuelLayer } from '../../duel/DuelLayer.js';
 import { BeggarStrip } from '../../raid/BeggarStrip.js';
 import { RaidLayer } from '../../raid/RaidLayer.js';
@@ -69,6 +70,7 @@ export function PetScreen({ character }: { character: CharacterDto }) {
   const reducedMotion = usePrefersReducedMotion();
   const { message, announce } = useAnnouncer();
   const [note, setNote] = useState<string | null>(null);
+  const [finding, setFinding] = useState(false);
 
   const now = useNow(TICK_MS);
   const stats = useLiveStats(character, now);
@@ -145,6 +147,19 @@ export function PetScreen({ character }: { character: CharacterDto }) {
         <div className="pet-topbar-right">
           <TournamentStrip character={character} />
 
+          {/* The front door to duelling. It lived only beside a Town Square message before,
+              so a player who was not reading chat had no way to find it at all. */}
+          <button
+            type="button"
+            className="ghost small duel-open"
+            // Named apart from the per-player "Duel <nickname>" buttons inside the finder,
+            // so neither can ever be mistaken for the other.
+            aria-label="Find a duel"
+            onClick={() => setFinding(true)}
+          >
+            <span aria-hidden="true">⚔️</span> Duel
+          </button>
+
           <span
             className={character.lethalCoins <= 2 ? 'coin-chip low' : 'coin-chip'}
             aria-label={`${character.lethalCoins} LethalCoins`}
@@ -219,6 +234,8 @@ export function PetScreen({ character }: { character: CharacterDto }) {
       />
 
       <ChatPanel />
+      {/* Closed the moment a Stakes Card opens, so the two never stack. */}
+      {finding && <DuelFinder onClose={() => setFinding(false)} />}
       <DuelLayer character={character} />
       <RaidLayer character={character} />
 
