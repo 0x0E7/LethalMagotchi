@@ -8,6 +8,7 @@ import type { Config } from '../../src/config.js';
 import { DEFAULT_TOURNAMENT_CONFIG, REFRESH_COOKIE_NAME } from '../../src/config.js';
 import { createPool, type Db } from '../../src/db/pool.js';
 import { DuelService } from '../../src/duel/service.js';
+import { NeglectService } from '../../src/neglect/service.js';
 import { RaidService } from '../../src/raid/service.js';
 import { createLimiters, type Limiters } from '../../src/deps.js';
 import { RateLimiter } from '../../src/rate-limit.js';
@@ -68,6 +69,7 @@ export interface TestApp {
   chat: ChatService;
   duels: DuelService;
   raids: RaidService;
+  neglect: NeglectService;
 }
 
 /**
@@ -119,6 +121,7 @@ export async function createTestApp(
     chat?: ChatService;
     duels?: DuelService;
     raids?: RaidService;
+    neglect?: NeglectService;
   } = {},
 ): Promise<TestApp> {
   const config = testConfig(options.config);
@@ -130,6 +133,9 @@ export async function createTestApp(
   const chat = options.chat ?? new ChatService({ db, hub, limiters });
   const duels = options.duels ?? new DuelService({ db, hub, chat, limiters });
   const raids = options.raids ?? new RaidService({ db, hub, limiters });
+  // Never started in tests: the sweep is driven by calling `sweep()` directly, so a
+  // death fires on the test's clock rather than on a 60-second wall-clock timer.
+  const neglect = options.neglect ?? new NeglectService({ db, hub });
   const app = await buildApp({
     config,
     db,
@@ -140,8 +146,9 @@ export async function createTestApp(
     chat,
     duels,
     raids,
+    neglect,
   });
-  return { app, db, limiters, config, hub, tournaments, chat, duels, raids };
+  return { app, db, limiters, config, hub, tournaments, chat, duels, raids, neglect };
 }
 
 /** Usernames must satisfy ^[a-z0-9_]{3,20}$; keep them unique so tests never collide. */

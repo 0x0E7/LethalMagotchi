@@ -103,9 +103,14 @@ async function readRow(characterId: string) {
     lethal_coins: number;
     action_cooldowns: Record<string, string>;
     last_simulated_at: Date;
-  }>('SELECT stats, lethal_coins, action_cooldowns, last_simulated_at FROM characters WHERE id = $1', [
-    characterId,
-  ]);
+    rebirth_count: number;
+    deleted_at: Date | null;
+  }>(
+    'SELECT stats, lethal_coins, action_cooldowns, last_simulated_at, rebirth_count, deleted_at FROM characters WHERE id = $1',
+    [
+      characterId,
+    ],
+  );
   return rows[0]!;
 }
 
@@ -587,25 +592,40 @@ describe('neglect and HP', () => {
     expect(character.stats).toMatchObject({ hunger: 0, hygiene: 0, energy: 0, mood: 0, hp: 0 });
   });
 
-  it('keeps a zero-HP pet fully playable — there is no death state yet', async () => {
+  /**
+   * These two used to assert the opposite — "a zero-HP pet stays fully playable, there is no
+   * death state yet" — which is precisely the bug: HP reached zero and the pet carried on.
+   * A zero-HP pet is now dead, and the action that finds it that way is refused rather than
+   * applied to a corpse.
+   */
+  it('refuses an action on a pet that has reached zero HP, and kills it', async () => {
     const player = await newPlayer();
     await backdateWatermark(player.characterId, 30 * 24);
 
     const response = await fire(player, 'shower');
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().character.stats.hygiene).toBe(100);
-    expect(response.json().character.stats.hp).toBe(0);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('CHARACTER_DIED');
+
+    const row = await readRow(player.characterId);
+    expect(row.stats.hp).toBe(100);
+    expect(row.rebirth_count).toBe(1);
+    // Renewed, not removed: the same row and the same character.
+    expect(row.deleted_at).toBeNull();
   });
 
-  it('cannot heal a zero-HP pet with actions alone — only recovered care regenerates HP', async () => {
+  it('does not spend coins on an action that found the pet already dead', async () => {
     const player = await newPlayer();
     await setCoins(player.characterId, 20);
     await backdateWatermark(player.characterId, 30 * 24);
 
     await fire(player, 'feed', { itemId: 'feast' });
 
-    expect((await readRow(player.characterId)).stats.hp).toBe(0);
+    // The 6-coin feast is never charged. The wallet is 5 because rebirth reset it, not
+    // because 20 was debited — and either way they were not billed for feeding a corpse.
+    const row = await readRow(player.characterId);
+    expect(row.lethal_coins).toBe(5);
+    expect(row.stats.hunger).toBe(100);
   });
 
   it('regenerates HP once every care stat is back above the comfort line', async () => {

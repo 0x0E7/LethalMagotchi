@@ -8,6 +8,8 @@ import { useTournament } from '../../tournament/TournamentProvider.js';
 const CAUSE_HEADINGS: Record<RebirthCause, (nickname: string) => string> = {
   tournament_entry_hp_exhausted: (nickname) => `${nickname} ran out of HP.`,
   duel_defeat: (nickname) => `${nickname} lost the duel.`,
+  // Names what actually happened rather than the polite version. Nobody did this to them.
+  neglect: (nickname) => `${nickname} was not looked after.`,
 };
 
 /**

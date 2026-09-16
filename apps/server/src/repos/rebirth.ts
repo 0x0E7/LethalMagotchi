@@ -16,19 +16,44 @@ export interface RebirthOutcome {
  * survive. Runs inside the caller's transaction so the charge that killed the character
  * and the renewal that follows it commit or roll back together.
  */
+export interface RebirthInput {
+  statsBefore: CharacterStats;
+  cause: RebirthCause;
+  tournamentId: string | null;
+  duelId?: string | null;
+  at: Date;
+  /**
+   * Claim the death conditionally: the write only lands if `rebirth_count` is still what the
+   * caller read. Callers holding an ordered row lock don't need it, but the neglect reaper
+   * races itself by design — a sweep can fire at the same instant as the owner's socket
+   * binding — and a stale reader would otherwise commit a second rebirth after the first,
+   * resetting an already-renewed wallet. `null` means somebody else got there.
+   */
+  expectRebirthCount?: number;
+}
+
+/**
+ * The two shapes stated in the type rather than left to a comment: an unguarded rebirth is
+ * unconditional and always returns an outcome, while a guarded one may lose its claim.
+ */
+export function rebirthCharacter(
+  client: DbClient,
+  row: CharacterRow,
+  input: RebirthInput & { expectRebirthCount: number },
+): Promise<RebirthOutcome | null>;
+export function rebirthCharacter(
+  client: DbClient,
+  row: CharacterRow,
+  input: RebirthInput & { expectRebirthCount?: undefined },
+): Promise<RebirthOutcome>;
 export async function rebirthCharacter(
   client: DbClient,
   row: CharacterRow,
-  input: {
-    statsBefore: CharacterStats;
-    cause: RebirthCause;
-    tournamentId: string | null;
-    duelId?: string | null;
-    at: Date;
-  },
-): Promise<RebirthOutcome> {
+  input: RebirthInput,
+): Promise<RebirthOutcome | null> {
   const fresh = rebirthState();
   const rebirthIndex = row.rebirth_count + 1;
+  const guarded = input.expectRebirthCount !== undefined;
 
   const updated = await client.query<CharacterRow>(
     `UPDATE characters
@@ -45,10 +70,15 @@ export async function rebirthCharacter(
          -- lock's own timeout clears it.
          active_raid_id = NULL,
          updated_at = now()
-     WHERE id = $1
+     WHERE id = $1${guarded ? ' AND rebirth_count = $6' : ''}
      RETURNING *`,
-    [row.id, JSON.stringify(fresh.stats), fresh.lethalCoins, input.at, rebirthIndex],
+    guarded
+      ? [row.id, JSON.stringify(fresh.stats), fresh.lethalCoins, input.at, rebirthIndex, input.expectRebirthCount]
+      : [row.id, JSON.stringify(fresh.stats), fresh.lethalCoins, input.at, rebirthIndex],
   );
+
+  // Lost the claim: another reaper has already renewed them, and there is nothing to record.
+  if (updated.rows.length === 0) return null;
 
   await client.query(
     `INSERT INTO rebirth_events (id, character_id, occurred_at, rebirth_index, cause, tournament_id, duel_id, stats_before, coins_before)
