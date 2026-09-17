@@ -4,37 +4,30 @@ import {
   type SessionResponse,
   type UsernameAvailabilityResponse,
   checkUsername,
-  loginSchema,
   normalizeUsername,
   registerSchema,
+  loginSchema,
   suggestUsernames,
   usernameAvailabilityQuerySchema,
 } from '@lethalmagotchi/shared';
 import { REFRESH_COOKIE_NAME } from '../config.js';
 import type { ServerDeps } from '../deps.js';
-import { ApiError, invalidCredentials } from '../errors.js';
-import { isUniqueViolation } from '../db/pool.js';
-import { hashPassword, verifyPassword } from '../auth/passwords.js';
-import type { RateLimiter } from '../rate-limit.js';
-import {
-  clearRefreshCookie,
-  issueRefreshToken,
-  revokePresentedRefreshToken,
-  rotateRefreshToken,
-  setRefreshCookie,
-} from '../auth/tokens.js';
-import {
-  findAccountByNormalizedUsername,
-  findAccountById,
-  insertAccount,
-  toAccountDto,
-  touchLastLogin,
-} from '../repos/accounts.js';
-import { findActiveCharacterByAccount, toCharacterDto } from '../repos/characters.js';
+import { ApiError } from '../errors.js';
+import { performLogin, performLogout, performRefresh, performRegister, type SessionDeps } from '../auth/session.js';
+import { clearRefreshCookie, setRefreshCookie } from '../auth/tokens.js';
+import { findAccountByNormalizedUsername } from '../repos/accounts.js';
 import { parseOrThrow } from '../validate.js';
+import type { RateLimiter } from '../rate-limit.js';
 
+/**
+ * v1's session transport: the refresh token lives in an `httpOnly` cookie and never appears
+ * in a response body. `routes/auth-v2.ts` is the same handlers with the token moved into the
+ * body instead — see `v2-architecture.md` §14.3. The core logic lives in `auth/session.ts`;
+ * this file is deliberately thin.
+ */
 export async function registerAuthRoutes(app: FastifyInstance, deps: ServerDeps): Promise<void> {
   const { config, db, limiters } = deps;
+  const sessionDeps: SessionDeps = { db, config, app, dummyPasswordHash: deps.dummyPasswordHash };
 
   const enforce = (limiter: RateLimiter, key: string) => {
     const decision = limiter.check(key);
@@ -45,42 +38,21 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: ServerDeps)
     }
   };
 
-  const sessionPayload = async (accountId: string): Promise<SessionResponse> => {
-    const account = await findAccountById(db, accountId);
-    if (!account) throw new ApiError(401, 'UNAUTHORIZED', 'Account no longer exists.');
-    const character = await findActiveCharacterByAccount(db, accountId);
-    return {
-      accessToken: app.jwt.sign({ sub: accountId }, { expiresIn: config.accessTokenTtlSeconds }),
-      expiresInSeconds: config.accessTokenTtlSeconds,
-      account: toAccountDto(account),
-      character: character ? toCharacterDto(character) : null,
-    };
-  };
+  /**
+   * The enforcement point for the rule stated on `SessionResult` in `auth/session.ts`: the
+   * refresh token rides the cookie only. `refreshToken` is destructured out and discarded
+   * here, never spread into the body — an `httpOnly` cookie whose value also sits in
+   * page-readable JSON is not protected by `httpOnly` at all.
+   */
+  const toV1Session = ({ refreshToken: _refreshToken, ...rest }: Awaited<ReturnType<typeof performRegister>>): SessionResponse =>
+    rest;
 
   app.post('/api/v1/auth/register', async (request, reply) => {
     enforce(limiters.register, request.ip);
     const body = parseOrThrow(registerSchema, request.body);
-    const usernameNormalized = normalizeUsername(body.username);
-
-    let account;
-    try {
-      account = await insertAccount(db, {
-        username: body.username.normalize('NFKC').trim(),
-        usernameNormalized,
-        passwordHash: await hashPassword(body.password),
-      });
-    } catch (error) {
-      if (isUniqueViolation(error, 'ux_accounts_username_normalized')) {
-        throw new ApiError(409, 'USERNAME_TAKEN', 'That username is taken.', {
-          fields: { username: 'That username is taken.' },
-        });
-      }
-      throw error;
-    }
-
-    const refreshToken = await issueRefreshToken(db, config, account.id);
-    setRefreshCookie(reply, config, refreshToken);
-    return reply.code(201).send(await sessionPayload(account.id));
+    const session = await performRegister(sessionDeps, body);
+    setRefreshCookie(reply, config, session.refreshToken);
+    return reply.code(201).send(toV1Session(session));
   });
 
   app.post('/api/v1/auth/login', async (request, reply) => {
@@ -90,40 +62,34 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: ServerDeps)
     enforce(limiters.loginByIp, request.ip);
     enforce(limiters.loginByUsername, usernameNormalized);
 
-    const account = await findAccountByNormalizedUsername(db, usernameNormalized);
-    const passwordMatches = await verifyPassword(
-      account?.password_hash ?? deps.dummyPasswordHash,
-      body.password,
-    );
-    if (!account || !passwordMatches) throw invalidCredentials();
-
-    await touchLastLogin(db, account.id);
-    const refreshToken = await issueRefreshToken(db, config, account.id);
-    setRefreshCookie(reply, config, refreshToken);
-    return reply.code(200).send(await sessionPayload(account.id));
+    const session = await performLogin(sessionDeps, body);
+    setRefreshCookie(reply, config, session.refreshToken);
+    return reply.code(200).send(toV1Session(session));
   });
 
   app.post('/api/v1/auth/refresh', async (request, reply) => {
     const presented = request.cookies[REFRESH_COOKIE_NAME];
     if (!presented) throw new ApiError(401, 'UNAUTHORIZED', 'No active session.');
 
-    const result = await rotateRefreshToken(db, config, presented);
-    if (result.status !== 'ok') {
+    let result;
+    try {
+      result = await performRefresh(sessionDeps, presented);
+    } catch (error) {
       clearRefreshCookie(reply, config);
-      throw new ApiError(401, 'UNAUTHORIZED', 'Session expired. Sign in again.');
+      throw error;
     }
 
-    setRefreshCookie(reply, config, result.token);
+    setRefreshCookie(reply, config, result.refreshToken);
     const payload: RefreshResponse = {
-      accessToken: app.jwt.sign({ sub: result.accountId }, { expiresIn: config.accessTokenTtlSeconds }),
-      expiresInSeconds: config.accessTokenTtlSeconds,
+      accessToken: result.accessToken,
+      expiresInSeconds: result.expiresInSeconds,
     };
     return reply.code(200).send(payload);
   });
 
   app.post('/api/v1/auth/logout', async (request, reply) => {
     const presented = request.cookies[REFRESH_COOKIE_NAME];
-    if (presented) await revokePresentedRefreshToken(db, presented);
+    await performLogout({ db }, presented ?? null);
     clearRefreshCookie(reply, config);
     return reply.code(204).send();
   });

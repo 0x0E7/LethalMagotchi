@@ -1,0 +1,299 @@
+/*
+ * Token values ported from .claude/v2-ui-ux.md §1 (colour/type/spacing/radii) and the exact
+ * phone-composition numbers from §3.1. Declared as USS custom properties on .auth-root so
+ * every rule below reads a name, not a literal — the same discipline the web tokens in
+ * apps/client/src/styles.css already follow, just expressed in UI Toolkit's USS dialect.
+ *
+ * KNOWN GAP, flagged rather than silently guessed around: UI Toolkit has no reliable
+ * box-shadow property across Editor versions, so the elevation --shadow-1/2/3 tiers from §1.1
+ * are not reproduced here. Border + fill stand in for now; revisit once the target Editor
+ * version's exact UI Toolkit feature set is confirmed (unity/SETUP.md).
+ *
+ * KNOWN GAP #2: -unity-font-definition below is left unset (falls back to UI Toolkit's default
+ * font) because no Nunito/Poppins font ASSET exists in this project yet — only the token
+ * *name* is real. Importing the actual font file and wiring it here is a one-line follow-up
+ * once art assets land; see unity/SETUP.md.
+ */
+
+.auth-root {
+    --surface: #FDF7F1;
+    --surface-raised: #FFFFFF;
+    --ink: #2C2230;
+    --ink-muted: #6F6472;
+    --accent: #E2603F;
+    --accent-strong: #C9451F;
+    --accent-soft: #FBE3DA;
+    --line: #E7DCD4;
+    --line-strong: #CDBFB4;
+    --danger: #B3261E;
+    --danger-soft: #FBE4E2;
+    --fresh: #2F6F4F;
+    --plum-700: #46304A;
+    --plum-900: #2C2230;
+
+    --r-sm: 10px;
+    --r-md: 12px;
+    --r-xl: 24px;
+
+    flex-grow: 1;
+    background-color: var(--plum-900); /* the ground shows through where the gradient
+                                            image (below) hasn't painted yet, e.g. first frame */
+}
+
+/* UI Toolkit has no CSS linear-gradient() — the closest correct approximation without a
+   generated gradient texture is stacking a solid plum-900 ground under a semi-transparent
+   plum-700 panel; a real diagonal gradient asset (matching --hero-grad's 160deg angle) is a
+   follow-up once the art pipeline exists. Tracked in unity/SETUP.md rather than faked here
+   with a flat colour that would silently become "the design" if left uncommented. */
+#header-band, .auth-root {
+    background-color: var(--plum-900);
+}
+
+#header-band {
+    height: 232px;
+    align-items: center;
+    padding-top: 72px;
+}
+
+.mascot-slot {
+    width: 96px;
+    height: 96px;
+    border-radius: 26px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.34);
+    background-color: rgba(255, 255, 255, 0.05);
+    /* §3.3: a static pre-rendered still, NOT a live Unity render — swapped in at runtime by
+       whatever loads the mascot asset; this element is the anchor it fills. */
+}
+
+.wordmark {
+    color: rgb(255, 255, 255);
+    font-size: 32px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    margin-top: 24px;
+    letter-spacing: -0.3px; /* approximates --t-display's -0.02em at this size */
+}
+
+.tagline {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 14px;
+    white-space: normal;
+    -unity-text-align: middle-center;
+    margin-top: 8px;
+    margin-left: 24px;
+    margin-right: 24px;
+    max-width: 300px; /* ~30ch per §3.1 */
+}
+
+/* Bottom-anchored sheet, not a floating card — see LoginScreenController.cs and §3.1 for why:
+   a sheet is what survives the keyboard-open collapse without ever re-laying-out the card
+   itself (only the header band above it animates). */
+.card {
+    flex-grow: 1;
+    background-color: var(--surface-raised);
+    border-top-left-radius: var(--r-xl);
+    border-top-right-radius: var(--r-xl);
+}
+
+.card-scroll {
+    flex-grow: 1;
+}
+
+/* Descendant, not direct-child. ScrollView's hierarchy is
+   ScrollView > #unity-content-viewport > #unity-content-container, so `.card-scroll > #unity-content-container`
+   matched nothing and the card's whole 24px inset silently never applied — content sat flush
+   against both edges of the sheet. A `>` combinator against a container an element library owns
+   the internals of is a standing hazard; the descendant form survives that hierarchy changing. */
+.card-scroll #unity-content-container {
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 24px;
+    padding-bottom: 58px; /* 24 + 34 safe-area, §3.1's exact figure */
+}
+
+.segmented {
+    flex-direction: row;
+    background-color: var(--accent-soft);
+    border-radius: 14px;
+    padding: 4px;
+    height: 48px;
+    margin-bottom: 20px;
+}
+
+.segment {
+    flex-grow: 1;
+    flex-basis: 0;
+    background-color: transparent;
+    border-width: 0;
+    border-radius: var(--r-sm);
+    color: var(--ink-muted);
+    -unity-font-style: normal;
+    font-size: 14px;
+    margin: 0;
+}
+
+.segment--active {
+    background-color: var(--surface-raised);
+    color: var(--ink);
+    -unity-font-style: bold;
+    border-bottom-width: 2px;
+    border-bottom-color: var(--accent);
+}
+
+.banner {
+    background-color: var(--danger-soft);
+    color: var(--danger);
+    font-size: 13px;
+    white-space: normal;
+    padding: 10px 14px;
+    border-radius: var(--r-md);
+    margin-bottom: 16px;
+}
+
+.field {
+    margin-bottom: 20px;
+}
+
+.field-label {
+    color: var(--ink);
+    font-size: 13px;
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+}
+
+.field-input {
+    height: 52px;
+    background-color: var(--surface-raised);
+    border-width: 1px;
+    border-color: var(--line-strong);
+    border-radius: var(--r-md);
+    padding-left: 14px;
+    padding-right: 14px;
+    font-size: 16px; /* §6: 16px minimum on mobile inputs, stops iOS auto-zoom */
+    -unity-text-align: middle-left;
+}
+
+.field-input:focus {
+    border-color: var(--accent);
+}
+
+.password-row {
+    flex-direction: row;
+    align-items: stretch;
+}
+
+.password-input {
+    flex-grow: 1;
+}
+
+.password-show {
+    margin-left: 8px;
+    width: 64px;
+    background-color: transparent;
+    border-width: 0;
+    color: var(--accent-strong);
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+.field-hint {
+    color: var(--ink-muted);
+    font-size: 12px;
+    margin-top: 6px;
+    white-space: normal;
+}
+
+.field-hint--error {
+    color: var(--danger);
+}
+
+.field-hint--ok {
+    color: var(--fresh);
+}
+
+.field-hint--static {
+    /* Recovery-email helper text — never replaced by a live-check state, unlike
+       #username-hint, so it carries no state-driven colour class. */
+}
+
+.chip-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.chip {
+    height: 32px;
+    border-radius: 999px;
+    background-color: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 12px;
+    -unity-font-style: bold;
+    padding: 0 10px;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    border-width: 0;
+    -unity-text-align: middle-center;
+}
+
+.link-right {
+    align-self: flex-end;
+    background-color: transparent;
+    border-width: 0;
+    color: var(--accent-strong);
+    font-size: 13px;
+    -unity-font-style: bold;
+    margin-bottom: 16px;
+    min-height: 44px; /* §6 touch-target floor, even though the visible label is small */
+}
+
+.strength-meter {
+    flex-direction: row;
+    margin-top: 6px;
+    /* Cancels the trailing gap the last segment's own margin-right leaves, instead of a
+       `.strength-seg:last-child` rule: USS supports only a small fixed set of pseudo-classes
+       (:hover/:active/:focus/:disabled/:enabled/:checked/:inactive/:root) and `:last-child` is
+       not among them, so that rule was dropped at import and the meter sat 6px narrow on its
+       right edge, misaligned with every field above it. */
+    margin-right: -6px;
+}
+
+.strength-seg {
+    flex-grow: 1;
+    height: 6px;
+    border-radius: 3px;
+    background-color: var(--line);
+    margin-right: 6px;
+}
+
+.strength-seg--on {
+    background-color: var(--accent);
+}
+
+.primary-button {
+    height: 56px;
+    background-color: var(--accent-strong);
+    color: rgb(255, 255, 255);
+    font-size: 17px;
+    -unity-font-style: bold;
+    border-width: 0;
+    border-radius: var(--r-md);
+    margin-top: 4px;
+}
+
+.primary-button:disabled {
+    background-color: var(--line-strong);
+    color: var(--ink-muted);
+}
+
+.mode-swap-footer {
+    -unity-text-align: middle-center;
+    color: var(--ink-muted);
+    font-size: 14px;
+    margin-top: 24px;
+    display: none; /* phone: cut per §3.1's "deliberate omission" note. Nothing turns this back
+                       on yet — the desktop breakpoint is unimplemented, so today this element
+                       is a placeholder that never renders. Stated plainly rather than described
+                       as behaviour that does not exist. */
+}

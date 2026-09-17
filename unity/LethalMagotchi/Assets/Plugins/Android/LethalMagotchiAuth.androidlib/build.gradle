@@ -1,0 +1,19 @@
+// Unity auto-merges any `*.androidlib` folder under Assets/Plugins/Android into the
+// generated Gradle project, so this dependency reaches AndroidKeystoreStore.cs
+// (androidx.security.crypto.EncryptedSharedPreferences) without a Custom Gradle Template.
+// See unity/SETUP.md "Android" for how to verify this resolved after the first build.
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.lethalmagotchi.auth'
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 24
+        targetSdkVersion 34
+    }
+}
+
+dependencies {
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+}

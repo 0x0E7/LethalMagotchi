@@ -82,6 +82,21 @@ export interface RefreshResponse {
   expiresInSeconds: number;
 }
 
+/**
+ * The v2 (native mobile / WebGL-bridge) session transport — `v2-architecture.md` §14.3.
+ * Identical to `SessionResponse`/`RefreshResponse` except the refresh token rides in the body
+ * instead of an `httpOnly` cookie, because there is no cookie jar on a native client. Never
+ * reuse these shapes for a v1 (browser) response — see the note on `SessionResult` in
+ * `apps/server/src/auth/session.ts` for why that specifically defeats `httpOnly`.
+ */
+export interface SessionResponseV2 extends SessionResponse {
+  refreshToken: string;
+}
+
+export interface RefreshResponseV2 extends RefreshResponse {
+  refreshToken: string;
+}
+
 export interface ReferenceResponse {
   version: string;
   species: Species[];

@@ -10,6 +10,7 @@ import type { ServerDeps } from './deps.js';
 import { ApiError } from './errors.js';
 import { registerActionRoutes } from './routes/actions.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerAuthV2Routes } from './routes/auth-v2.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerDonationRoutes } from './routes/donations.js';
 import { registerDuelRoutes } from './routes/duels.js';
@@ -109,6 +110,9 @@ export async function buildApp(deps: ServerDeps): Promise<FastifyInstance> {
 
   await registerWebSocket(app, deps);
   await registerAuthRoutes(app, deps);
+  // Additive: the same accounts and sessions, over a body-based transport for native mobile
+  // and the WebGL bridge. See routes/auth-v2.ts for why this cannot just be a v1 cookie.
+  await registerAuthV2Routes(app, deps);
   await registerCharacterRoutes(app, deps);
   await registerActionRoutes(app, deps);
   await registerReferenceRoutes(app, deps);

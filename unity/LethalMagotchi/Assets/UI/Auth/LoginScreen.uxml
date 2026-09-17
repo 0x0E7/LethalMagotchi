@@ -1,0 +1,80 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="LoginScreen.uss" />
+
+    <!--
+      Structure follows v2-ui-ux.md §3.1 (phone login, 390x844) exactly: a full-bleed hero
+      gradient with a header band, and a bottom-anchored sheet rather than a floating card —
+      see LoginScreenController.cs's keyboard-open handling for why the sheet shape matters
+      (it is what survives TextField losing focus on a layout reflow, §6.3).
+    -->
+    <ui:VisualElement name="auth-root" class="auth-root">
+
+        <ui:VisualElement name="header-band" class="header-band">
+            <ui:VisualElement name="mascot-slot" class="mascot-slot" />
+            <ui:Label name="wordmark" text="LethalMagotchi" class="wordmark" />
+            <ui:Label name="tagline" text="Raise one small, well-dressed animal. Keep it alive."
+                      class="tagline" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="card" class="card">
+            <ui:ScrollView name="card-scroll" class="card-scroll" vertical-scroller-visibility="Auto">
+
+                <ui:VisualElement name="segmented" class="segmented">
+                    <ui:Button name="segment-login" text="Log in" class="segment segment--active" />
+                    <ui:Button name="segment-register" text="Register" class="segment" />
+                </ui:VisualElement>
+
+                <ui:Label name="banner" class="banner" style="display: none;" />
+
+                <ui:VisualElement name="username-field" class="field">
+                    <ui:Label text="Username" class="field-label" />
+                    <ui:TextField name="username-input" class="field-input"
+                                  max-length="64" />
+                    <ui:Label name="username-hint" class="field-hint" style="display: none;" />
+                    <ui:VisualElement name="username-suggestions" class="chip-row" style="display: none;" />
+                </ui:VisualElement>
+
+                <ui:VisualElement name="password-field" class="field">
+                    <ui:Label text="Password" class="field-label" />
+                    <ui:VisualElement class="password-row">
+                        <!-- Masked state is set explicitly in LoginScreenController.BindElements
+                             rather than here — see that line's comment for why the UXML
+                             attribute name for this was deliberately not relied on. -->
+                        <ui:TextField name="password-input" class="field-input password-input"
+                                      max-length="128" />
+                        <ui:Button name="password-show" text="Show" class="password-show" />
+                    </ui:VisualElement>
+                    <ui:Label name="password-hint" class="field-hint" style="display: none;" />
+                    <ui:VisualElement name="strength-meter" class="strength-meter" style="display: none;">
+                        <ui:VisualElement class="strength-seg" />
+                        <ui:VisualElement class="strength-seg" />
+                        <ui:VisualElement class="strength-seg" />
+                        <ui:VisualElement class="strength-seg" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <!-- Login-only: forgot-password link. Register-only: optional recovery email
+                     (v2-architecture.md §14.6) occupies the same row per §3.1's table (#5 vs #5b). -->
+                <ui:Button name="forgot-password" text="Forgot password?" class="link-right" />
+
+                <ui:VisualElement name="recovery-email-field" class="field" style="display: none;">
+                    <ui:Label text="Recovery email — optional" class="field-label" />
+                    <ui:TextField name="recovery-email-input" class="field-input"
+                                  max-length="254" />
+                    <ui:Label text="Without it there is no way back into a forgotten account."
+                              class="field-hint field-hint--static" />
+                </ui:VisualElement>
+
+                <ui:Button name="submit-button" text="Log in" class="primary-button" />
+
+                <!-- Desktop-only per §3.1's "deliberate omission on phone" note. Currently a
+                     PLACEHOLDER: hidden by USS and not driven by LoginScreenController at all —
+                     the desktop breakpoint work that would show and populate it has not been
+                     done. Named here so that work has an anchor, not because it renders today. -->
+                <ui:Label name="mode-swap-footer" class="mode-swap-footer" />
+
+            </ui:ScrollView>
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  No `package` attribute. AGP 8 (what Unity 6000.0 generates) rejects a library manifest that
+  declares one when the module also sets `namespace` in build.gradle — it is not a warning, it
+  fails the Android build with "package attribute is deprecated/Setting the namespace via the
+  package attribute is not supported". The namespace in build.gradle is the single declaration.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+</manifest>
